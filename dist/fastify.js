@@ -1,7 +1,10 @@
 import {
   criarLogAcessos,
+  lerRegistrado,
+  registrarAlteracoes,
+  registrarAntes,
   usuarioPadrao
-} from "./chunk-3U566USD.js";
+} from "./chunk-LHEPDUXD.js";
 
 // src/fastify.ts
 async function logAcessos(fastify, opcoes) {
@@ -14,7 +17,8 @@ async function logAcessos(fastify, opcoes) {
       headers: request.headers,
       body: request.body,
       statusCode: reply.statusCode,
-      usuario: usuario(request)
+      usuario: usuario(request),
+      ...lerRegistrado(request)
     });
   });
   fastify.addHook("onClose", async () => log.fechar());
@@ -24,5 +28,7 @@ logAcessos[Symbol.for("fastify.display-name")] = "log-acessos";
 var fastify_default = logAcessos;
 export {
   fastify_default as default,
-  logAcessos
+  logAcessos,
+  registrarAlteracoes,
+  registrarAntes
 };

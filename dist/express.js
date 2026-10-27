@@ -1,7 +1,10 @@
 import {
   criarLogAcessos,
+  lerRegistrado,
+  registrarAlteracoes,
+  registrarAntes,
   usuarioPadrao
-} from "./chunk-3U566USD.js";
+} from "./chunk-LHEPDUXD.js";
 
 // src/express.ts
 function logAcessos(opcoes) {
@@ -15,7 +18,8 @@ function logAcessos(opcoes) {
         headers: req.headers,
         body: req.body,
         statusCode: res.statusCode,
-        usuario: usuario(req)
+        usuario: usuario(req),
+        ...lerRegistrado(req)
       });
     });
     next();
@@ -24,5 +28,7 @@ function logAcessos(opcoes) {
 var express_default = logAcessos;
 export {
   express_default as default,
-  logAcessos
+  logAcessos,
+  registrarAlteracoes,
+  registrarAntes
 };

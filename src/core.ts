@@ -30,6 +30,44 @@ export interface OpcoesLogAcessos {
   agruparPorPagina?: boolean;
   /** Minutos até a mesma página do mesmo usuário poder gravar de novo. Padrão: 30. */
   janelaVisitaMin?: number;
+  /**
+   * Campos de dado pessoal que a auditoria guarda como "***" (no corpo e no
+   * de/para): o log mostra QUE mudou, não o valor. Ex.: ['cpf', 'rg'].
+   * Senha/token já saem sempre.
+   */
+  ocultarCampos?: string[];
+}
+
+/** De/para de uma escrita: só os campos que mudaram. */
+export type Alteracoes = Record<string, { de: unknown; para: unknown }>;
+
+const ANTES = Symbol.for('@drogamais/log-acessos.antes');
+const ALTERACOES = Symbol.for('@drogamais/log-acessos.alteracoes');
+
+/**
+ * Na rota de PUT/PATCH/DELETE, informa o registro como estava ANTES da
+ * escrita: a auditoria grava em `alteracoes` só os campos do corpo enviado
+ * que mudaram ({campo: {de, para}}); no DELETE, o registro apagado (para: null).
+ *
+ *   const atual = await prisma.loja.findUnique({ where: { idLoja } })
+ *   registrarAntes(request, atual)
+ */
+export function registrarAntes(req: object, registro: unknown): void {
+  (req as any)[ANTES] = registro;
+}
+
+/**
+ * Para quando o app já sabe o de/para (ex.: comparou antes e depois de
+ * salvar, pegando o que o próprio backend mudou). Tem prioridade sobre o
+ * registrarAntes.
+ */
+export function registrarAlteracoes(req: object, alteracoes: Alteracoes): void {
+  (req as any)[ALTERACOES] = alteracoes;
+}
+
+/** Lê o que a rota registrou (usado pelos adaptadores Fastify/Express). */
+export function lerRegistrado(req: object): { antes?: unknown; alteracoes?: unknown } {
+  return { antes: (req as any)[ANTES], alteracoes: (req as any)[ALTERACOES] };
 }
 
 /** O que os adaptadores (Fastify/Express) extraem de cada requisição. */
@@ -40,6 +78,10 @@ export interface Requisicao {
   body?: unknown;
   statusCode: number;
   usuario: Usuario | null;
+  /** registrarAntes(req, ...) da rota. */
+  antes?: unknown;
+  /** registrarAlteracoes(req, ...) da rota. */
+  alteracoes?: unknown;
 }
 
 export interface LogAcessos {
@@ -99,15 +141,105 @@ export function caminhoFrontend(headers: Requisicao['headers']): string | null {
   return caminho.length > 255 ? caminho.slice(0, 255) : caminho;
 }
 
-/** Corpo para auditoria: sem campos sensíveis, JSON truncado em 2000. */
-export function corpoAuditoria(body: unknown): string | null {
+const OCULTO = '***';
+
+/** Corpo para auditoria: sem campos sensíveis, ocultos como ***, JSON truncado em 2000. */
+export function corpoAuditoria(body: unknown, ocultos: ReadonlySet<string> = new Set()): string | null {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
   const copia: Record<string, unknown> = { ...(body as Record<string, unknown>) };
   for (const campo of Object.keys(copia)) {
-    if (CAMPOS_SENSIVEIS.has(campo.toLowerCase())) delete copia[campo];
+    const c = campo.toLowerCase();
+    if (CAMPOS_SENSIVEIS.has(c)) delete copia[campo];
+    else if (ocultos.has(c) && copia[campo] != null && copia[campo] !== '') copia[campo] = OCULTO;
   }
   const json = JSON.stringify(copia);
   return json.length > 2000 ? json.slice(0, 2000) + '…' : json;
+}
+
+const ehObjeto = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date);
+
+/** Valor como sairia no JSON (Date → ISO, Decimal → string via toJSON). */
+function comoJson(v: unknown): unknown {
+  if (v === undefined) return null;
+  try {
+    return JSON.parse(JSON.stringify(v));
+  } catch {
+    return String(v);
+  }
+}
+
+/**
+ * Igualdade "de negócio": null, undefined e "" são o mesmo vazio; 73 e "73"
+ * são iguais; "2026-10-23" e "2026-10-23T00:00:00.000Z" também. Evita
+ * de/para falso (o formulário manda "" onde o banco tem null, número como
+ * texto etc.).
+ */
+export function iguais(a: unknown, b: unknown): boolean {
+  const x = comoJson(a);
+  const y = comoJson(b);
+  const vazio = (v: unknown) => v === null || v === '';
+  if (vazio(x) && vazio(y)) return true;
+  if (JSON.stringify(x) === JSON.stringify(y)) return true;
+  if (typeof x !== 'object' && typeof y !== 'object' && x !== null && y !== null) {
+    const sx = String(x);
+    const sy = String(y);
+    if (sx === sy) return true;
+    const soData = /^\d{4}-\d{2}-\d{2}$/;
+    if (soData.test(sx) && sy.startsWith(sx + 'T00:00:00')) return true;
+    if (soData.test(sy) && sx.startsWith(sy + 'T00:00:00')) return true;
+  }
+  return false;
+}
+
+const LIMITE_VALOR = 500;
+const LIMITE_ALTERACOES = 20_000;
+
+function valorAuditoria(v: unknown): unknown {
+  const j = comoJson(v);
+  return typeof j === 'string' && j.length > LIMITE_VALOR ? j.slice(0, LIMITE_VALOR) + '…' : j;
+}
+
+/**
+ * De/para de uma escrita, ou null. Prioridade: o de/para pronto da rota
+ * (registrarAlteracoes); senão compara o registro anterior (registrarAntes)
+ * com o corpo enviado — só os campos que vieram no corpo. No DELETE, o
+ * registro anterior inteiro com para: null. Campos sensíveis saem, ocultos
+ * viram ***, e pares sem mudança real (ver `iguais`) são descartados.
+ */
+export function calcularAlteracoes(
+  method: string,
+  body: unknown,
+  antes: unknown,
+  prontas: unknown,
+  ocultos: ReadonlySet<string> = new Set(),
+): Alteracoes | null {
+  let pares: [string, unknown, unknown][] = [];
+  if (ehObjeto(prontas)) {
+    for (const [k, v] of Object.entries(prontas)) {
+      if (ehObjeto(v) && ('de' in v || 'para' in v)) pares.push([k, v.de, v.para]);
+    }
+  } else if (ehObjeto(antes)) {
+    if (method === 'DELETE') pares = Object.entries(antes).map(([k, v]) => [k, v, null]);
+    else if (ehObjeto(body)) pares = Object.entries(body).map(([k, v]) => [k, antes[k], v]);
+  }
+
+  const out: Alteracoes = {};
+  let tamanho = 0;
+  for (const [campo, de, para] of pares) {
+    const c = campo.toLowerCase();
+    if (CAMPOS_SENSIVEIS.has(c) || iguais(de, para)) continue;
+    const item = ocultos.has(c)
+      ? { de: de == null || de === '' ? null : OCULTO, para: para == null || para === '' ? null : OCULTO }
+      : { de: valorAuditoria(de), para: valorAuditoria(para) };
+    tamanho += JSON.stringify(item).length + campo.length;
+    if (tamanho > LIMITE_ALTERACOES) {
+      out._truncado = { de: null, para: true };
+      break;
+    }
+    out[campo] = item;
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 /**
@@ -170,6 +302,7 @@ export function criarLogAcessos(opcoes: OpcoesLogAcessos): LogAcessos {
   const { aplicacao, acesso = true, auditoria = true, agruparPorPagina = true, janelaVisitaMin = 30 } = opcoes;
   const visitas = criarControleVisitas(janelaVisitaMin * 60_000);
   const auditoriaIgnorada = criarFiltroRotas(opcoes.ignorarAuditoria ?? []);
+  const ocultos = new Set((opcoes.ocultarCampos ?? []).map((c) => c.toLowerCase()));
   const url = opcoes.connectionString ?? process.env.DATABASE_OPERATIONAL_URL;
   let pool: pg.Pool | null = null;
   let ultimoErro = 0;
@@ -239,12 +372,16 @@ export function criarLogAcessos(opcoes: OpcoesLogAcessos): LogAcessos {
           );
         }
         if (auditoria && METODOS_ESCRITA.has(r.method) && !auditoriaIgnorada(caminho)) {
+          const alteracoes = calcularAlteracoes(r.method, r.body, r.antes, r.alteracoes, ocultos);
           gravar(
             `INSERT INTO log_acessos.fat_log_portal
-               (user_email, user_name, aplicacao, method, path, status_code, body)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+               (user_email, user_name, aplicacao, method, path, status_code, body, alteracoes)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
             // Sem query string: pode trazer CPF/termos de busca.
-            [email, nome, aplicacao, r.method, corta(r.url.split('?')[0], 255), r.statusCode, corpoAuditoria(r.body)],
+            [
+              email, nome, aplicacao, r.method, corta(r.url.split('?')[0], 255), r.statusCode,
+              corpoAuditoria(r.body, ocultos), alteracoes ? JSON.stringify(alteracoes) : null,
+            ],
           );
         }
       } catch (e) {

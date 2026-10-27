@@ -1,4 +1,5 @@
 import { OpcoesLogAcessos, Usuario } from './index.cjs';
+export { registrarAlteracoes, registrarAntes } from './index.cjs';
 
 interface OpcoesFastify extends OpcoesLogAcessos {
     /** Como achar o usuário. Padrão: usuarioPadrao(request.user). */

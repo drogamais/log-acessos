@@ -1,6 +1,68 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizarCaminho, caminhoFrontend, corpoAuditoria, usuarioPadrao, criarControleVisitas, criarFiltroRotas } from '../dist/index.js';
+import {
+  normalizarCaminho, caminhoFrontend, corpoAuditoria, usuarioPadrao, criarControleVisitas, criarFiltroRotas,
+  calcularAlteracoes, iguais, registrarAntes, registrarAlteracoes, lerRegistrado,
+} from '../dist/index.js';
+import * as fastify from '../dist/fastify.js';
+import * as express from '../dist/express.js';
+
+test('helpers saem também por /fastify e /express', () => {
+  assert.equal(typeof fastify.registrarAntes, 'function');
+  assert.equal(typeof express.registrarAlteracoes, 'function');
+});
+
+test('iguais: vazios, número x texto e data x data-hora não são mudança', () => {
+  assert.equal(iguais('', null), true);
+  assert.equal(iguais(undefined, null), true);
+  assert.equal(iguais(73, '73'), true);
+  assert.equal(iguais('2026-10-23', new Date('2026-10-23T00:00:00Z')), true);
+  assert.equal(iguais({ a: [1] }, { a: [1] }), true);
+  assert.equal(iguais('PLUGPHARMA', 'API_SID'), false);
+  assert.equal(iguais(true, false), false);
+  assert.equal(iguais(0, null), false);
+});
+
+test('alteracoes: antes x corpo enviado, só o que mudou', () => {
+  const antes = { fonte_de_dados: 'PLUGPHARMA', fantasia: 'Madre Leonia', telefone: '', id: 73 };
+  const corpo = { fonte_de_dados: 'API_SID', fantasia: 'Madre Leonia', telefone: null, id: '73' };
+  assert.deepEqual(calcularAlteracoes('PATCH', corpo, antes, undefined), {
+    fonte_de_dados: { de: 'PLUGPHARMA', para: 'API_SID' },
+  });
+  assert.equal(calcularAlteracoes('PATCH', { fantasia: 'Madre Leonia' }, antes, undefined), null);
+  // campo novo (não existia no antes)
+  assert.deepEqual(calcularAlteracoes('PUT', { email: 'a@x' }, {}, undefined), { email: { de: null, para: 'a@x' } });
+});
+
+test('alteracoes: de/para pronto tem prioridade e perde o ruído "" -> null', () => {
+  const prontas = { telefone_fixo_2: { de: '', para: null }, fonte_de_dados: { de: 'PLUGPHARMA', para: 'API_SID' }, lixo: 1 };
+  assert.deepEqual(calcularAlteracoes('PATCH', { x: 1 }, { x: 2 }, prontas), {
+    fonte_de_dados: { de: 'PLUGPHARMA', para: 'API_SID' },
+  });
+});
+
+test('alteracoes: DELETE grava o registro apagado; sem antes = null', () => {
+  assert.deepEqual(calcularAlteracoes('DELETE', undefined, { nome: 'Ana', obs: '' }, undefined), {
+    nome: { de: 'Ana', para: null },
+  });
+  assert.equal(calcularAlteracoes('PATCH', { a: 1 }, undefined, undefined), null);
+});
+
+test('alteracoes e corpo: sensível sai, oculto vira ***', () => {
+  const ocultos = new Set(['cpf']);
+  assert.deepEqual(
+    calcularAlteracoes('PUT', { cpf: '222', senha: 'x', nome: 'B' }, { cpf: '111', senha: 'y', nome: 'A' }, undefined, ocultos),
+    { cpf: { de: '***', para: '***' }, nome: { de: 'A', para: 'B' } },
+  );
+  assert.equal(corpoAuditoria({ nome: 'B', cpf: '222', rg: '' }, new Set(['cpf', 'rg'])), '{"nome":"B","cpf":"***","rg":""}');
+});
+
+test('registrarAntes/registrarAlteracoes chegam ao adaptador', () => {
+  const req = {};
+  registrarAntes(req, { a: 1 });
+  registrarAlteracoes(req, { a: { de: 1, para: 2 } });
+  assert.deepEqual(lerRegistrado(req), { antes: { a: 1 }, alteracoes: { a: { de: 1, para: 2 } } });
+});
 
 test('ignorarAuditoria: rota exata, prefixo de segmento e RegExp', () => {
   const f = criarFiltroRotas(['/api/lojas/preferences', /\/rascunho$/]);

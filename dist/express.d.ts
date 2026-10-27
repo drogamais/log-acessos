@@ -1,4 +1,5 @@
 import { OpcoesLogAcessos, Usuario } from './index.js';
+export { registrarAlteracoes, registrarAntes } from './index.js';
 
 interface OpcoesExpress extends OpcoesLogAcessos {
     /** Como achar o usuário. Padrão: usuarioPadrao(req.user ?? req.auth). */

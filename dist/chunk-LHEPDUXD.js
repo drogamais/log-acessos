@@ -1,5 +1,16 @@
 // src/core.ts
 import pg from "pg";
+var ANTES = Symbol.for("@drogamais/log-acessos.antes");
+var ALTERACOES = Symbol.for("@drogamais/log-acessos.alteracoes");
+function registrarAntes(req, registro) {
+  req[ANTES] = registro;
+}
+function registrarAlteracoes(req, alteracoes) {
+  req[ALTERACOES] = alteracoes;
+}
+function lerRegistrado(req) {
+  return { antes: req[ANTES], alteracoes: req[ALTERACOES] };
+}
 var EXT_IGNORAR = /\.(js|mjs|css|map|png|jpe?g|svg|gif|webp|ico|woff2?|ttf|eot)$/i;
 var METODOS_ESCRITA = /* @__PURE__ */ new Set(["POST", "PUT", "PATCH", "DELETE"]);
 var CAMPOS_SENSIVEIS = /* @__PURE__ */ new Set(["password", "senha", "token", "secret", "access_token", "refresh_token"]);
@@ -29,14 +40,73 @@ function caminhoFrontend(headers) {
   }
   return caminho.length > 255 ? caminho.slice(0, 255) : caminho;
 }
-function corpoAuditoria(body) {
+var OCULTO = "***";
+function corpoAuditoria(body, ocultos = /* @__PURE__ */ new Set()) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return null;
   const copia = { ...body };
   for (const campo of Object.keys(copia)) {
-    if (CAMPOS_SENSIVEIS.has(campo.toLowerCase())) delete copia[campo];
+    const c = campo.toLowerCase();
+    if (CAMPOS_SENSIVEIS.has(c)) delete copia[campo];
+    else if (ocultos.has(c) && copia[campo] != null && copia[campo] !== "") copia[campo] = OCULTO;
   }
   const json = JSON.stringify(copia);
   return json.length > 2e3 ? json.slice(0, 2e3) + "\u2026" : json;
+}
+var ehObjeto = (v) => !!v && typeof v === "object" && !Array.isArray(v) && !(v instanceof Date);
+function comoJson(v) {
+  if (v === void 0) return null;
+  try {
+    return JSON.parse(JSON.stringify(v));
+  } catch {
+    return String(v);
+  }
+}
+function iguais(a, b) {
+  const x = comoJson(a);
+  const y = comoJson(b);
+  const vazio = (v) => v === null || v === "";
+  if (vazio(x) && vazio(y)) return true;
+  if (JSON.stringify(x) === JSON.stringify(y)) return true;
+  if (typeof x !== "object" && typeof y !== "object" && x !== null && y !== null) {
+    const sx = String(x);
+    const sy = String(y);
+    if (sx === sy) return true;
+    const soData = /^\d{4}-\d{2}-\d{2}$/;
+    if (soData.test(sx) && sy.startsWith(sx + "T00:00:00")) return true;
+    if (soData.test(sy) && sx.startsWith(sy + "T00:00:00")) return true;
+  }
+  return false;
+}
+var LIMITE_VALOR = 500;
+var LIMITE_ALTERACOES = 2e4;
+function valorAuditoria(v) {
+  const j = comoJson(v);
+  return typeof j === "string" && j.length > LIMITE_VALOR ? j.slice(0, LIMITE_VALOR) + "\u2026" : j;
+}
+function calcularAlteracoes(method, body, antes, prontas, ocultos = /* @__PURE__ */ new Set()) {
+  let pares = [];
+  if (ehObjeto(prontas)) {
+    for (const [k, v] of Object.entries(prontas)) {
+      if (ehObjeto(v) && ("de" in v || "para" in v)) pares.push([k, v.de, v.para]);
+    }
+  } else if (ehObjeto(antes)) {
+    if (method === "DELETE") pares = Object.entries(antes).map(([k, v]) => [k, v, null]);
+    else if (ehObjeto(body)) pares = Object.entries(body).map(([k, v]) => [k, antes[k], v]);
+  }
+  const out = {};
+  let tamanho = 0;
+  for (const [campo, de, para] of pares) {
+    const c = campo.toLowerCase();
+    if (CAMPOS_SENSIVEIS.has(c) || iguais(de, para)) continue;
+    const item = ocultos.has(c) ? { de: de == null || de === "" ? null : OCULTO, para: para == null || para === "" ? null : OCULTO } : { de: valorAuditoria(de), para: valorAuditoria(para) };
+    tamanho += JSON.stringify(item).length + campo.length;
+    if (tamanho > LIMITE_ALTERACOES) {
+      out._truncado = { de: null, para: true };
+      break;
+    }
+    out[campo] = item;
+  }
+  return Object.keys(out).length ? out : null;
 }
 function usuarioPadrao(u) {
   if (!u || typeof u !== "object") return null;
@@ -76,6 +146,7 @@ function criarLogAcessos(opcoes) {
   const { aplicacao, acesso = true, auditoria = true, agruparPorPagina = true, janelaVisitaMin = 30 } = opcoes;
   const visitas = criarControleVisitas(janelaVisitaMin * 6e4);
   const auditoriaIgnorada = criarFiltroRotas(opcoes.ignorarAuditoria ?? []);
+  const ocultos = new Set((opcoes.ocultarCampos ?? []).map((c) => c.toLowerCase()));
   const url = opcoes.connectionString ?? process.env.DATABASE_OPERATIONAL_URL;
   let pool = null;
   let ultimoErro = 0;
@@ -132,12 +203,22 @@ function criarLogAcessos(opcoes) {
           );
         }
         if (auditoria && METODOS_ESCRITA.has(r.method) && !auditoriaIgnorada(caminho)) {
+          const alteracoes = calcularAlteracoes(r.method, r.body, r.antes, r.alteracoes, ocultos);
           gravar(
             `INSERT INTO log_acessos.fat_log_portal
-               (user_email, user_name, aplicacao, method, path, status_code, body)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+               (user_email, user_name, aplicacao, method, path, status_code, body, alteracoes)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
             // Sem query string: pode trazer CPF/termos de busca.
-            [email, nome, aplicacao, r.method, corta(r.url.split("?")[0], 255), r.statusCode, corpoAuditoria(r.body)]
+            [
+              email,
+              nome,
+              aplicacao,
+              r.method,
+              corta(r.url.split("?")[0], 255),
+              r.statusCode,
+              corpoAuditoria(r.body, ocultos),
+              alteracoes ? JSON.stringify(alteracoes) : null
+            ]
           );
         }
       } catch (e) {
@@ -152,9 +233,14 @@ function criarLogAcessos(opcoes) {
 }
 
 export {
+  registrarAntes,
+  registrarAlteracoes,
+  lerRegistrado,
   normalizarCaminho,
   caminhoFrontend,
   corpoAuditoria,
+  iguais,
+  calcularAlteracoes,
   usuarioPadrao,
   criarFiltroRotas,
   criarControleVisitas,

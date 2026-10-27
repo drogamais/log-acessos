@@ -1,18 +1,28 @@
 import {
+  calcularAlteracoes,
   caminhoFrontend,
   corpoAuditoria,
   criarControleVisitas,
   criarFiltroRotas,
   criarLogAcessos,
+  iguais,
+  lerRegistrado,
   normalizarCaminho,
+  registrarAlteracoes,
+  registrarAntes,
   usuarioPadrao
-} from "./chunk-3U566USD.js";
+} from "./chunk-LHEPDUXD.js";
 export {
+  calcularAlteracoes,
   caminhoFrontend,
   corpoAuditoria,
   criarControleVisitas,
   criarFiltroRotas,
   criarLogAcessos,
+  iguais,
+  lerRegistrado,
   normalizarCaminho,
+  registrarAlteracoes,
+  registrarAntes,
   usuarioPadrao
 };

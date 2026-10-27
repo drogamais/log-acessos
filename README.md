@@ -5,7 +5,7 @@ Log de acesso e de auditoria dos portais Drogamais, num lugar só.
 | Tabela (pgDrogamais, schema `log_acessos`) | O que grava |
 |---|---|
 | `fat_log_acesso` | uma linha por **visita de página** do usuário logado: `path_frontend` (página do frontend, pelo `Referer`). Chamada sem página (script, integração) não é gravada |
-| `fat_log_portal` | escritas (POST/PUT/PATCH/DELETE) com o corpo, sem campos sensíveis |
+| `fat_log_portal` | escritas (POST/PUT/PATCH/DELETE) com o corpo, sem campos sensíveis, e `alteracoes` (de/para, jsonb) quando a rota informa o antes |
 
 - **Visita de página, não chamada de API:** a mesma página do mesmo usuário grava no máximo **uma vez a cada 30 min** (contados da última gravação). Uma tela que dispara 7 GETs grava 1 linha; ir e voltar entre páginas dentro da janela não repete; uma aba parada que consulta a API sozinha (polling) gera 1 linha por janela. A auditoria (`fat_log_portal`) grava toda escrita, sempre.
 - `pg` puro, **1 conexão** por app que fecha quando ociosa (não disputa o `max_connections` do banco com o app).
@@ -19,7 +19,7 @@ Log de acesso e de auditoria dos portais Drogamais, num lugar só.
 Sem npm registry: o app instala o tarball da tag (não precisa de git nem token na imagem Docker).
 
 ```bash
-npm install https://github.com/drogamais/log-acessos/archive/refs/tags/v0.7.0.tar.gz
+npm install https://github.com/drogamais/log-acessos/archive/refs/tags/v0.8.0.tar.gz
 ```
 
 Usa `DATABASE_OPERATIONAL_URL` (o pgDrogamais **principal** — a réplica não aceita escrita).
@@ -48,6 +48,24 @@ app.use(logAcessos({ aplicacao: 'precifica' }));
 
 CommonJS: `const { logAcessos } = require('@drogamais/log-acessos/express')`.
 
+## De/para nas escritas (`alteracoes`)
+
+Sem nada a fazer, a auditoria grava o corpo enviado. Para gravar também o que mudou, a rota de PUT/PATCH/DELETE informa o estado anterior — o pacote não sabe qual linha do banco a URL altera:
+
+```ts
+import { registrarAntes, registrarAlteracoes } from '@drogamais/log-acessos/fastify'; // ou /express
+
+// 1) o registro antes da escrita (chaves com o MESMO nome do corpo): o pacote
+//    compara com o corpo enviado e grava só o que mudou
+registrarAntes(request, lojaAntes);
+
+// 2) ou o de/para pronto (ex.: comparou antes e depois de salvar, pegando o
+//    que o próprio backend mudou) — tem prioridade
+registrarAlteracoes(request, { fonte_de_dados: { de: 'PLUGPHARMA', para: 'API_SID' } });
+```
+
+Resultado em `fat_log_portal.alteracoes`: `{"fonte_de_dados": {"de": "PLUGPHARMA", "para": "API_SID"}}`. No DELETE, o registro apagado (`para: null`). Pares sem mudança real são descartados (`""` x `null`, `73` x `"73"`, data x data-hora à meia-noite). Rota que não informa nada fica com `alteracoes = null` e o corpo de sempre.
+
 ## Opções
 
 | Opção | Padrão | |
@@ -59,6 +77,7 @@ CommonJS: `const { logAcessos } = require('@drogamais/log-acessos/express')`.
 | `ignorarAuditoria` | `[]` | rotas que a auditoria (`fat_log_portal`) não grava — o acesso continua. String = rota exata ou prefixo (`'/api/lojas/preferences'`), ou RegExp |
 | `agruparPorPagina` | `true` | `false` volta a gravar toda chamada de API |
 | `janelaVisitaMin` | `30` | minutos até a mesma página do mesmo usuário poder gravar de novo (ex.: `60`) |
+| `ocultarCampos` | `[]` | dado pessoal guardado como `***` no corpo e no de/para (ex.: `['cpf', 'rg']`): o log mostra que mudou, não o valor |
 | `usuario` | `request.user` (Fastify) / `req.user ?? req.auth` (Express) | função que devolve `{ email, nome }` ou `null` |
 
 O usuário padrão entende `email`/`preferred_username`/`username` e `name`/`nome`. Se o app guarda em outro lugar:

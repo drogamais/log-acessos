@@ -1,4 +1,5 @@
-import { criarLogAcessos, usuarioPadrao, type OpcoesLogAcessos, type Usuario } from './core.js';
+import { criarLogAcessos, lerRegistrado, usuarioPadrao, type OpcoesLogAcessos, type Usuario } from './core.js';
+export { registrarAntes, registrarAlteracoes } from './core.js';
 
 export interface OpcoesFastify extends OpcoesLogAcessos {
   /** Como achar o usuário. Padrão: usuarioPadrao(request.user). */
@@ -23,6 +24,7 @@ export async function logAcessos(fastify: any, opcoes: OpcoesFastify): Promise<v
       body: request.body,
       statusCode: reply.statusCode,
       usuario: usuario(request),
+      ...lerRegistrado(request),
     });
   });
   fastify.addHook('onClose', async () => log.fechar());

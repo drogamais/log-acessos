@@ -1,4 +1,5 @@
-import { criarLogAcessos, usuarioPadrao, type OpcoesLogAcessos, type Usuario } from './core.js';
+import { criarLogAcessos, lerRegistrado, usuarioPadrao, type OpcoesLogAcessos, type Usuario } from './core.js';
+export { registrarAntes, registrarAlteracoes } from './core.js';
 
 export interface OpcoesExpress extends OpcoesLogAcessos {
   /** Como achar o usuário. Padrão: usuarioPadrao(req.user ?? req.auth). */
@@ -26,6 +27,7 @@ export function logAcessos(opcoes: OpcoesExpress) {
         body: req.body,
         statusCode: res.statusCode,
         usuario: usuario(req),
+        ...lerRegistrado(req),
       });
     });
     next();
