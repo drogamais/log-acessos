@@ -49,7 +49,9 @@ test('normalizarCaminho troca ids por :id e tira query', () => {
 
 test('caminhoFrontend usa o Referer só quando é do mesmo domínio', () => {
   const host = 'analisemercado.drogamais.com.br';
-  assert.equal(caminhoFrontend({ host, referer: `https://${host}/produtos/123?aba=2` }), '/produtos/:id');
+  // mantém o ID (qual produto/campanha foi aberto); tira query e #
+  assert.equal(caminhoFrontend({ host, referer: `https://${host}/produtos/123?aba=2#topo` }), '/produtos/123');
+  assert.equal(caminhoFrontend({ host, referer: `https://${host}/campanha/a%C3%A7%C3%A3o` }), '/campanha/ação');
   assert.equal(caminhoFrontend({ host: 'backend:3000', 'x-forwarded-host': host, referer: `https://${host}/` }), '/');
   assert.equal(caminhoFrontend({ host, referer: 'https://google.com/busca' }), null);
   assert.equal(caminhoFrontend({ host }), null);

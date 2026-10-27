@@ -12,14 +12,14 @@ Log de acesso e de auditoria dos portais Drogamais, num lugar só.
 - Sessão em `America/Sao_Paulo`: o `created_at` (DEFAULT do banco) sai no mesmo horário em todos os apps.
 - Nunca lança nem atrasa a resposta; erros vão para o console, no máximo um por minuto.
 - ESM + CommonJS + tipos: serve para apps TS e JS, `type: module` ou não.
-- IDs na URL viram `:id` (`/api/lojas/123` → `/api/lojas/:id`); assets estáticos e `OPTIONS` são ignorados.
+- `path_frontend` guarda a página **com o ID** (`/campanha/123`), sem query string nem `#` — dá para cruzar com o cadastro (qual campanha mais acessada). Para agrupar por tela, use a view `log_acessos.vw_acesso_paginas` (coluna `pagina`, IDs como `:id`). Já o `path` da API grava IDs como `:id`. Assets estáticos e `OPTIONS` são ignorados.
 
 ## Instalação
 
 Sem npm registry: o app instala o tarball da tag (não precisa de git nem token na imagem Docker).
 
 ```bash
-npm install https://github.com/drogamais/log-acessos/archive/refs/tags/v0.4.0.tar.gz
+npm install https://github.com/drogamais/log-acessos/archive/refs/tags/v0.5.0.tar.gz
 ```
 
 Usa `DATABASE_OPERATIONAL_URL` (o pgDrogamais **principal** — a réplica não aceita escrita).

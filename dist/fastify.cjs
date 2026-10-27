@@ -59,7 +59,12 @@ function caminhoFrontend(headers) {
   }
   const hosts = [cabecalho(headers, "x-forwarded-host"), cabecalho(headers, "host")].flatMap((h) => h ? h.split(",") : []).map((h) => h.trim().toLowerCase());
   if (!hosts.includes(url.host.toLowerCase())) return null;
-  return normalizarCaminho(url.pathname);
+  let caminho = url.pathname || "/";
+  try {
+    caminho = decodeURI(caminho);
+  } catch {
+  }
+  return caminho.length > 255 ? caminho.slice(0, 255) : caminho;
 }
 function corpoAuditoria(body) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return null;

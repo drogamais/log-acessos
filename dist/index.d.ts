@@ -49,6 +49,11 @@ declare function normalizarCaminho(caminho: string): string;
  * Página do frontend que originou a chamada: pathname do Referer, só quando
  * o Referer é do próprio domínio do app (Host ou X-Forwarded-Host). Fora
  * disso (outro site, dev com portas diferentes, sem Referer) → null.
+ *
+ * Mantém os IDs (`/campanha/123`), ao contrário do `path` da API: saber QUAL
+ * campanha/loja foi aberta é o que interessa. Para agrupar por tela, a view
+ * log_acessos.vw_acesso_paginas normaliza. Query string e `#` saem (podem
+ * trazer termos de busca e filtros).
  */
 declare function caminhoFrontend(headers: Requisicao['headers']): string | null;
 /** Corpo para auditoria: sem campos sensíveis, JSON truncado em 2000. */

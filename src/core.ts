@@ -71,6 +71,11 @@ function cabecalho(headers: Requisicao['headers'], nome: string): string | undef
  * Página do frontend que originou a chamada: pathname do Referer, só quando
  * o Referer é do próprio domínio do app (Host ou X-Forwarded-Host). Fora
  * disso (outro site, dev com portas diferentes, sem Referer) → null.
+ *
+ * Mantém os IDs (`/campanha/123`), ao contrário do `path` da API: saber QUAL
+ * campanha/loja foi aberta é o que interessa. Para agrupar por tela, a view
+ * log_acessos.vw_acesso_paginas normaliza. Query string e `#` saem (podem
+ * trazer termos de busca e filtros).
  */
 export function caminhoFrontend(headers: Requisicao['headers']): string | null {
   const referer = cabecalho(headers, 'referer');
@@ -85,7 +90,13 @@ export function caminhoFrontend(headers: Requisicao['headers']): string | null {
     .flatMap((h) => (h ? h.split(',') : []))
     .map((h) => h.trim().toLowerCase());
   if (!hosts.includes(url.host.toLowerCase())) return null;
-  return normalizarCaminho(url.pathname);
+  let caminho = url.pathname || '/';
+  try {
+    caminho = decodeURI(caminho);
+  } catch {
+    // %-encoding inválido: grava como veio
+  }
+  return caminho.length > 255 ? caminho.slice(0, 255) : caminho;
 }
 
 /** Corpo para auditoria: sem campos sensíveis, JSON truncado em 2000. */
