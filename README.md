@@ -4,9 +4,10 @@ Log de acesso e de auditoria dos portais Drogamais, num lugar só.
 
 | Tabela (pgDrogamais, schema `log_acessos`) | O que grava |
 |---|---|
-| `fat_log_acesso` | toda requisição de usuário logado: método, `path` (rota da API) e `path_frontend` (página do frontend, pelo `Referer`) |
+| `fat_log_acesso` | uma linha por **visita de página** do usuário logado: `path_frontend` (página do frontend, pelo `Referer`), mais `path`/método da primeira chamada de API da visita |
 | `fat_log_portal` | escritas (POST/PUT/PATCH/DELETE) com o corpo, sem campos sensíveis |
 
+- **Visita de página, não chamada de API:** uma tela que dispara 7 GETs grava 1 linha. As chamadas seguintes da mesma página são ignoradas enquanto o usuário segue nela; trocar de página (ou voltar depois de 30 min parado) conta de novo. Chamadas sem `Referer` (scripts, integrações) contam uma a uma. A auditoria (`fat_log_portal`) grava toda escrita, sempre.
 - `pg` puro, **1 conexão** por app que fecha quando ociosa (não disputa o `max_connections` do banco com o app).
 - Sessão em `America/Sao_Paulo`: o `created_at` (DEFAULT do banco) sai no mesmo horário em todos os apps.
 - Nunca lança nem atrasa a resposta; erros vão para o console, no máximo um por minuto.
@@ -18,7 +19,7 @@ Log de acesso e de auditoria dos portais Drogamais, num lugar só.
 Sem npm registry: o app instala o tarball da tag (não precisa de git nem token na imagem Docker).
 
 ```bash
-npm install https://github.com/drogamais/log-acessos/archive/refs/tags/v0.1.0.tar.gz
+npm install https://github.com/drogamais/log-acessos/archive/refs/tags/v0.2.0.tar.gz
 ```
 
 Usa `DATABASE_OPERATIONAL_URL` (o pgDrogamais **principal** — a réplica não aceita escrita).
@@ -55,6 +56,8 @@ CommonJS: `const { logAcessos } = require('@drogamais/log-acessos/express')`.
 | `connectionString` | `process.env.DATABASE_OPERATIONAL_URL` | |
 | `acesso` | `true` | grava em `fat_log_acesso` |
 | `auditoria` | `true` | grava escritas em `fat_log_portal` |
+| `agruparPorPagina` | `true` | `false` volta a gravar toda chamada de API |
+| `janelaVisitaMin` | `30` | minutos parado na página para contar visita nova |
 | `usuario` | `request.user` (Fastify) / `req.user ?? req.auth` (Express) | função que devolve `{ email, nome }` ou `null` |
 
 O usuário padrão entende `email`/`preferred_username`/`username` e `name`/`nome`. Se o app guarda em outro lugar:

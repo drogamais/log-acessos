@@ -12,6 +12,14 @@ interface OpcoesLogAcessos {
     acesso?: boolean;
     /** Grava escritas (POST/PUT/PATCH/DELETE) com o corpo em fat_log_portal. Padrão: true. */
     auditoria?: boolean;
+    /**
+     * fat_log_acesso grava uma linha por VISITA de página (path_frontend), não
+     * por chamada de API: as demais chamadas da mesma página são ignoradas
+     * enquanto o usuário seguir nela. Padrão: true.
+     */
+    agruparPorPagina?: boolean;
+    /** Minutos sem atividade na página para contar uma visita nova. Padrão: 30. */
+    janelaVisitaMin?: number;
 }
 /** O que os adaptadores (Fastify/Express) extraem de cada requisição. */
 interface Requisicao {
@@ -44,6 +52,15 @@ declare function corpoAuditoria(body: unknown): string | null;
  * `email`/`preferred_username`/`username` e `name`/`nome`.
  */
 declare function usuarioPadrao(u: unknown): Usuario | null;
+/**
+ * Decide se uma chamada abre uma visita nova de página. Por usuário guarda a
+ * última página e quando ela foi usada: mesma página dentro da janela →
+ * mesma visita (não grava); outra página ou janela vencida → visita nova.
+ * Em memória, por processo: um restart do app conta uma visita a mais, só.
+ */
+declare function criarControleVisitas(janelaMs: number): {
+    visitaNova(usuario: string, pagina: string, agora?: number): boolean;
+};
 declare function criarLogAcessos(opcoes: OpcoesLogAcessos): LogAcessos;
 
-export { type LogAcessos, type OpcoesLogAcessos, type Requisicao, type Usuario, caminhoFrontend, corpoAuditoria, criarLogAcessos, normalizarCaminho, usuarioPadrao };
+export { type LogAcessos, type OpcoesLogAcessos, type Requisicao, type Usuario, caminhoFrontend, corpoAuditoria, criarControleVisitas, criarLogAcessos, normalizarCaminho, usuarioPadrao };

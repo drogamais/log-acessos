@@ -15,6 +15,14 @@ export interface OpcoesLogAcessos {
   acesso?: boolean;
   /** Grava escritas (POST/PUT/PATCH/DELETE) com o corpo em fat_log_portal. Padrão: true. */
   auditoria?: boolean;
+  /**
+   * fat_log_acesso grava uma linha por VISITA de página (path_frontend), não
+   * por chamada de API: as demais chamadas da mesma página são ignoradas
+   * enquanto o usuário seguir nela. Padrão: true.
+   */
+  agruparPorPagina?: boolean;
+  /** Minutos sem atividade na página para contar uma visita nova. Padrão: 30. */
+  janelaVisitaMin?: number;
 }
 
 /** O que os adaptadores (Fastify/Express) extraem de cada requisição. */
@@ -100,8 +108,34 @@ export function usuarioPadrao(u: unknown): Usuario | null {
 
 const corta = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s);
 
+/**
+ * Decide se uma chamada abre uma visita nova de página. Por usuário guarda a
+ * última página e quando ela foi usada: mesma página dentro da janela →
+ * mesma visita (não grava); outra página ou janela vencida → visita nova.
+ * Em memória, por processo: um restart do app conta uma visita a mais, só.
+ */
+export function criarControleVisitas(janelaMs: number) {
+  const ultimas = new Map<string, { pagina: string; quando: number }>();
+  let ultimaLimpeza = 0;
+
+  return {
+    visitaNova(usuario: string, pagina: string, agora = Date.now()): boolean {
+      // Limpa quem sumiu, no máximo uma vez por janela (o Map não cresce sem fim).
+      if (agora - ultimaLimpeza > janelaMs) {
+        for (const [k, v] of ultimas) if (agora - v.quando > janelaMs) ultimas.delete(k);
+        ultimaLimpeza = agora;
+      }
+      const ultima = ultimas.get(usuario);
+      const nova = !ultima || ultima.pagina !== pagina || agora - ultima.quando > janelaMs;
+      ultimas.set(usuario, { pagina, quando: agora });
+      return nova;
+    },
+  };
+}
+
 export function criarLogAcessos(opcoes: OpcoesLogAcessos): LogAcessos {
-  const { aplicacao, acesso = true, auditoria = true } = opcoes;
+  const { aplicacao, acesso = true, auditoria = true, agruparPorPagina = true, janelaVisitaMin = 30 } = opcoes;
+  const visitas = criarControleVisitas(janelaVisitaMin * 60_000);
   const url = opcoes.connectionString ?? process.env.DATABASE_OPERATIONAL_URL;
   let pool: pg.Pool | null = null;
   let ultimoErro = 0;
@@ -155,12 +189,18 @@ export function criarLogAcessos(opcoes: OpcoesLogAcessos): LogAcessos {
         const email = corta(r.usuario.email, 100);
         const nome = corta(r.usuario.nome || r.usuario.email, 150);
 
-        if (acesso) {
+        const paginaFrontend = caminhoFrontend(r.headers);
+        // Sem Referer (script, integração, chamada direta) não há página para
+        // agrupar: cada chamada conta.
+        const gravarAcesso =
+          acesso && (!agruparPorPagina || !paginaFrontend || visitas.visitaNova(email, paginaFrontend));
+
+        if (gravarAcesso) {
           gravar(
             `INSERT INTO log_acessos.fat_log_acesso
                (user_email, user_name, aplicacao, method, path, path_frontend)
              VALUES ($1, $2, $3, $4, $5, $6)`,
-            [email, nome, aplicacao, r.method, corta(caminho, 255), caminhoFrontend(r.headers)],
+            [email, nome, aplicacao, r.method, corta(caminho, 255), paginaFrontend],
           );
         }
         if (auditoria && METODOS_ESCRITA.has(r.method)) {

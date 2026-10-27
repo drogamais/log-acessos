@@ -32,6 +32,7 @@ var index_exports = {};
 __export(index_exports, {
   caminhoFrontend: () => caminhoFrontend,
   corpoAuditoria: () => corpoAuditoria,
+  criarControleVisitas: () => criarControleVisitas,
   criarLogAcessos: () => criarLogAcessos,
   normalizarCaminho: () => normalizarCaminho,
   usuarioPadrao: () => usuarioPadrao
@@ -82,8 +83,25 @@ function usuarioPadrao(u) {
   return { email: String(email), nome: nome == null ? null : String(nome) };
 }
 var corta = (s, n) => s.length > n ? s.slice(0, n) : s;
+function criarControleVisitas(janelaMs) {
+  const ultimas = /* @__PURE__ */ new Map();
+  let ultimaLimpeza = 0;
+  return {
+    visitaNova(usuario, pagina, agora = Date.now()) {
+      if (agora - ultimaLimpeza > janelaMs) {
+        for (const [k, v] of ultimas) if (agora - v.quando > janelaMs) ultimas.delete(k);
+        ultimaLimpeza = agora;
+      }
+      const ultima = ultimas.get(usuario);
+      const nova = !ultima || ultima.pagina !== pagina || agora - ultima.quando > janelaMs;
+      ultimas.set(usuario, { pagina, quando: agora });
+      return nova;
+    }
+  };
+}
 function criarLogAcessos(opcoes) {
-  const { aplicacao, acesso = true, auditoria = true } = opcoes;
+  const { aplicacao, acesso = true, auditoria = true, agruparPorPagina = true, janelaVisitaMin = 30 } = opcoes;
+  const visitas = criarControleVisitas(janelaVisitaMin * 6e4);
   const url = opcoes.connectionString ?? process.env.DATABASE_OPERATIONAL_URL;
   let pool = null;
   let ultimoErro = 0;
@@ -129,12 +147,14 @@ function criarLogAcessos(opcoes) {
         if (EXT_IGNORAR.test(caminho)) return;
         const email = corta(r.usuario.email, 100);
         const nome = corta(r.usuario.nome || r.usuario.email, 150);
-        if (acesso) {
+        const paginaFrontend = caminhoFrontend(r.headers);
+        const gravarAcesso = acesso && (!agruparPorPagina || !paginaFrontend || visitas.visitaNova(email, paginaFrontend));
+        if (gravarAcesso) {
           gravar(
             `INSERT INTO log_acessos.fat_log_acesso
                (user_email, user_name, aplicacao, method, path, path_frontend)
              VALUES ($1, $2, $3, $4, $5, $6)`,
-            [email, nome, aplicacao, r.method, corta(caminho, 255), caminhoFrontend(r.headers)]
+            [email, nome, aplicacao, r.method, corta(caminho, 255), paginaFrontend]
           );
         }
         if (auditoria && METODOS_ESCRITA.has(r.method)) {
@@ -160,6 +180,7 @@ function criarLogAcessos(opcoes) {
 0 && (module.exports = {
   caminhoFrontend,
   corpoAuditoria,
+  criarControleVisitas,
   criarLogAcessos,
   normalizarCaminho,
   usuarioPadrao
