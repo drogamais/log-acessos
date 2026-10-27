@@ -1,6 +1,6 @@
 {
   "name": "@drogamais/log-acessos",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Log de acesso e auditoria dos portais Drogamais (log_acessos no pgDrogamais) — plugin Fastify e middleware Express.",
   "license": "UNLICENSED",
   "type": "module",

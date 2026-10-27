@@ -16,6 +16,13 @@ export interface OpcoesLogAcessos {
   /** Grava escritas (POST/PUT/PATCH/DELETE) com o corpo em fat_log_portal. Padrão: true. */
   auditoria?: boolean;
   /**
+   * Rotas que a auditoria NÃO grava (o acesso continua). String = rota exata
+   * ou prefixo (`/api/x` pega `/api/x` e `/api/x/...`); RegExp = teste livre.
+   * Comparado com o caminho sem query e com IDs já como `:id`.
+   * Ex.: preferências de tela, que mudam a cada ajuste de coluna.
+   */
+  ignorarAuditoria?: (string | RegExp)[];
+  /**
    * fat_log_acesso grava uma linha por VISITA de página (path_frontend), não
    * por chamada de API: as demais chamadas da mesma página são ignoradas
    * enquanto o usuário seguir nela. Padrão: true.
@@ -108,6 +115,16 @@ export function usuarioPadrao(u: unknown): Usuario | null {
 
 const corta = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s);
 
+/** true se o caminho bate com alguma regra (string = exata ou prefixo de segmento; RegExp = test). */
+export function criarFiltroRotas(regras: (string | RegExp)[]): (caminho: string) => boolean {
+  const testes = regras.map((r) => {
+    if (r instanceof RegExp) return (c: string) => r.test(c);
+    const base = r.replace(/\/+$/, '');
+    return (c: string) => c === base || c.startsWith(base + '/');
+  });
+  return (caminho) => testes.some((t) => t(caminho));
+}
+
 /**
  * Decide se uma chamada abre uma visita nova de página. Por usuário guarda a
  * última página e quando ela foi usada: mesma página dentro da janela →
@@ -136,6 +153,7 @@ export function criarControleVisitas(janelaMs: number) {
 export function criarLogAcessos(opcoes: OpcoesLogAcessos): LogAcessos {
   const { aplicacao, acesso = true, auditoria = true, agruparPorPagina = true, janelaVisitaMin = 30 } = opcoes;
   const visitas = criarControleVisitas(janelaVisitaMin * 60_000);
+  const auditoriaIgnorada = criarFiltroRotas(opcoes.ignorarAuditoria ?? []);
   const url = opcoes.connectionString ?? process.env.DATABASE_OPERATIONAL_URL;
   let pool: pg.Pool | null = null;
   let ultimoErro = 0;
@@ -206,7 +224,7 @@ export function criarLogAcessos(opcoes: OpcoesLogAcessos): LogAcessos {
             [email, nome, aplicacao, r.method, paginaFrontend ? null : corta(caminho, 255), paginaFrontend],
           );
         }
-        if (auditoria && METODOS_ESCRITA.has(r.method)) {
+        if (auditoria && METODOS_ESCRITA.has(r.method) && !auditoriaIgnorada(caminho)) {
           gravar(
             `INSERT INTO log_acessos.fat_log_portal
                (user_email, user_name, aplicacao, method, path, status_code, body)

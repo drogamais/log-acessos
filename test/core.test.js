@@ -1,6 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizarCaminho, caminhoFrontend, corpoAuditoria, usuarioPadrao, criarControleVisitas } from '../dist/index.js';
+import { normalizarCaminho, caminhoFrontend, corpoAuditoria, usuarioPadrao, criarControleVisitas, criarFiltroRotas } from '../dist/index.js';
+
+test('ignorarAuditoria: rota exata, prefixo de segmento e RegExp', () => {
+  const f = criarFiltroRotas(['/api/lojas/preferences', /\/rascunho$/]);
+  assert.equal(f('/api/lojas/preferences'), true);
+  assert.equal(f('/api/lojas/preferences/:id'), true);
+  assert.equal(f('/api/lojas/preferencesX'), false);
+  assert.equal(f('/api/lojas/:id'), false);
+  assert.equal(f('/api/pedidos/:id/rascunho'), true);
+  assert.equal(criarFiltroRotas([])('/api/x'), false);
+});
 
 test('visitas: várias chamadas da mesma página = 1 visita', () => {
   const v = criarControleVisitas(30 * 60_000);

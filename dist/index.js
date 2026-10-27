@@ -2,14 +2,16 @@ import {
   caminhoFrontend,
   corpoAuditoria,
   criarControleVisitas,
+  criarFiltroRotas,
   criarLogAcessos,
   normalizarCaminho,
   usuarioPadrao
-} from "./chunk-K2PRIYWY.js";
+} from "./chunk-CLCMNUEA.js";
 export {
   caminhoFrontend,
   corpoAuditoria,
   criarControleVisitas,
+  criarFiltroRotas,
   criarLogAcessos,
   normalizarCaminho,
   usuarioPadrao

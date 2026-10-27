@@ -1,7 +1,7 @@
 import {
   criarLogAcessos,
   usuarioPadrao
-} from "./chunk-K2PRIYWY.js";
+} from "./chunk-CLCMNUEA.js";
 
 // src/fastify.ts
 async function logAcessos(fastify, opcoes) {

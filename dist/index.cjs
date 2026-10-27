@@ -33,6 +33,7 @@ __export(index_exports, {
   caminhoFrontend: () => caminhoFrontend,
   corpoAuditoria: () => corpoAuditoria,
   criarControleVisitas: () => criarControleVisitas,
+  criarFiltroRotas: () => criarFiltroRotas,
   criarLogAcessos: () => criarLogAcessos,
   normalizarCaminho: () => normalizarCaminho,
   usuarioPadrao: () => usuarioPadrao
@@ -83,6 +84,14 @@ function usuarioPadrao(u) {
   return { email: String(email), nome: nome == null ? null : String(nome) };
 }
 var corta = (s, n) => s.length > n ? s.slice(0, n) : s;
+function criarFiltroRotas(regras) {
+  const testes = regras.map((r) => {
+    if (r instanceof RegExp) return (c) => r.test(c);
+    const base = r.replace(/\/+$/, "");
+    return (c) => c === base || c.startsWith(base + "/");
+  });
+  return (caminho) => testes.some((t) => t(caminho));
+}
 function criarControleVisitas(janelaMs) {
   const ultimas = /* @__PURE__ */ new Map();
   let ultimaLimpeza = 0;
@@ -102,6 +111,7 @@ function criarControleVisitas(janelaMs) {
 function criarLogAcessos(opcoes) {
   const { aplicacao, acesso = true, auditoria = true, agruparPorPagina = true, janelaVisitaMin = 30 } = opcoes;
   const visitas = criarControleVisitas(janelaVisitaMin * 6e4);
+  const auditoriaIgnorada = criarFiltroRotas(opcoes.ignorarAuditoria ?? []);
   const url = opcoes.connectionString ?? process.env.DATABASE_OPERATIONAL_URL;
   let pool = null;
   let ultimoErro = 0;
@@ -160,7 +170,7 @@ function criarLogAcessos(opcoes) {
             [email, nome, aplicacao, r.method, paginaFrontend ? null : corta(caminho, 255), paginaFrontend]
           );
         }
-        if (auditoria && METODOS_ESCRITA.has(r.method)) {
+        if (auditoria && METODOS_ESCRITA.has(r.method) && !auditoriaIgnorada(caminho)) {
           gravar(
             `INSERT INTO log_acessos.fat_log_portal
                (user_email, user_name, aplicacao, method, path, status_code, body)
@@ -184,6 +194,7 @@ function criarLogAcessos(opcoes) {
   caminhoFrontend,
   corpoAuditoria,
   criarControleVisitas,
+  criarFiltroRotas,
   criarLogAcessos,
   normalizarCaminho,
   usuarioPadrao

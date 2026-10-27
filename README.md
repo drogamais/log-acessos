@@ -19,7 +19,7 @@ Log de acesso e de auditoria dos portais Drogamais, num lugar só.
 Sem npm registry: o app instala o tarball da tag (não precisa de git nem token na imagem Docker).
 
 ```bash
-npm install https://github.com/drogamais/log-acessos/archive/refs/tags/v0.3.0.tar.gz
+npm install https://github.com/drogamais/log-acessos/archive/refs/tags/v0.4.0.tar.gz
 ```
 
 Usa `DATABASE_OPERATIONAL_URL` (o pgDrogamais **principal** — a réplica não aceita escrita).
@@ -56,6 +56,7 @@ CommonJS: `const { logAcessos } = require('@drogamais/log-acessos/express')`.
 | `connectionString` | `process.env.DATABASE_OPERATIONAL_URL` | |
 | `acesso` | `true` | grava em `fat_log_acesso` |
 | `auditoria` | `true` | grava escritas em `fat_log_portal` |
+| `ignorarAuditoria` | `[]` | rotas que a auditoria (`fat_log_portal`) não grava — o acesso continua. String = rota exata ou prefixo (`'/api/lojas/preferences'`), ou RegExp |
 | `agruparPorPagina` | `true` | `false` volta a gravar toda chamada de API |
 | `janelaVisitaMin` | `30` | minutos parado na página para contar visita nova |
 | `usuario` | `request.user` (Fastify) / `req.user ?? req.auth` (Express) | função que devolve `{ email, nome }` ou `null` |

@@ -13,6 +13,13 @@ interface OpcoesLogAcessos {
     /** Grava escritas (POST/PUT/PATCH/DELETE) com o corpo em fat_log_portal. Padrão: true. */
     auditoria?: boolean;
     /**
+     * Rotas que a auditoria NÃO grava (o acesso continua). String = rota exata
+     * ou prefixo (`/api/x` pega `/api/x` e `/api/x/...`); RegExp = teste livre.
+     * Comparado com o caminho sem query e com IDs já como `:id`.
+     * Ex.: preferências de tela, que mudam a cada ajuste de coluna.
+     */
+    ignorarAuditoria?: (string | RegExp)[];
+    /**
      * fat_log_acesso grava uma linha por VISITA de página (path_frontend), não
      * por chamada de API: as demais chamadas da mesma página são ignoradas
      * enquanto o usuário seguir nela. Padrão: true.
@@ -52,6 +59,8 @@ declare function corpoAuditoria(body: unknown): string | null;
  * `email`/`preferred_username`/`username` e `name`/`nome`.
  */
 declare function usuarioPadrao(u: unknown): Usuario | null;
+/** true se o caminho bate com alguma regra (string = exata ou prefixo de segmento; RegExp = test). */
+declare function criarFiltroRotas(regras: (string | RegExp)[]): (caminho: string) => boolean;
 /**
  * Decide se uma chamada abre uma visita nova de página. Por usuário guarda a
  * última página e quando ela foi usada: mesma página dentro da janela →
@@ -63,4 +72,4 @@ declare function criarControleVisitas(janelaMs: number): {
 };
 declare function criarLogAcessos(opcoes: OpcoesLogAcessos): LogAcessos;
 
-export { type LogAcessos, type OpcoesLogAcessos, type Requisicao, type Usuario, caminhoFrontend, corpoAuditoria, criarControleVisitas, criarLogAcessos, normalizarCaminho, usuarioPadrao };
+export { type LogAcessos, type OpcoesLogAcessos, type Requisicao, type Usuario, caminhoFrontend, corpoAuditoria, criarControleVisitas, criarFiltroRotas, criarLogAcessos, normalizarCaminho, usuarioPadrao };
