@@ -200,7 +200,10 @@ export function criarLogAcessos(opcoes: OpcoesLogAcessos): LogAcessos {
             `INSERT INTO log_acessos.fat_log_acesso
                (user_email, user_name, aplicacao, method, path, path_frontend)
              VALUES ($1, $2, $3, $4, $5, $6)`,
-            [email, nome, aplicacao, r.method, corta(caminho, 255), paginaFrontend],
+            // Com página do frontend, a rota da API não acrescenta nada (é só
+            // a 1ª chamada da visita): path fica NULL. Sem página (script,
+            // integração), a rota é a única informação — grava.
+            [email, nome, aplicacao, r.method, paginaFrontend ? null : corta(caminho, 255), paginaFrontend],
           );
         }
         if (auditoria && METODOS_ESCRITA.has(r.method)) {

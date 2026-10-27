@@ -5,7 +5,7 @@ import {
   criarLogAcessos,
   normalizarCaminho,
   usuarioPadrao
-} from "./chunk-LJ2GKPKE.js";
+} from "./chunk-K2PRIYWY.js";
 export {
   caminhoFrontend,
   corpoAuditoria,

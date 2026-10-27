@@ -4,7 +4,7 @@ Log de acesso e de auditoria dos portais Drogamais, num lugar só.
 
 | Tabela (pgDrogamais, schema `log_acessos`) | O que grava |
 |---|---|
-| `fat_log_acesso` | uma linha por **visita de página** do usuário logado: `path_frontend` (página do frontend, pelo `Referer`), mais `path`/método da primeira chamada de API da visita |
+| `fat_log_acesso` | uma linha por **visita de página** do usuário logado: `path_frontend` (página do frontend, pelo `Referer`). `path` (rota da API) só vem quando não há página — scripts, integrações |
 | `fat_log_portal` | escritas (POST/PUT/PATCH/DELETE) com o corpo, sem campos sensíveis |
 
 - **Visita de página, não chamada de API:** uma tela que dispara 7 GETs grava 1 linha. As chamadas seguintes da mesma página são ignoradas enquanto o usuário segue nela; trocar de página (ou voltar depois de 30 min parado) conta de novo. Chamadas sem `Referer` (scripts, integrações) contam uma a uma. A auditoria (`fat_log_portal`) grava toda escrita, sempre.
@@ -19,7 +19,7 @@ Log de acesso e de auditoria dos portais Drogamais, num lugar só.
 Sem npm registry: o app instala o tarball da tag (não precisa de git nem token na imagem Docker).
 
 ```bash
-npm install https://github.com/drogamais/log-acessos/archive/refs/tags/v0.2.0.tar.gz
+npm install https://github.com/drogamais/log-acessos/archive/refs/tags/v0.3.0.tar.gz
 ```
 
 Usa `DATABASE_OPERATIONAL_URL` (o pgDrogamais **principal** — a réplica não aceita escrita).
