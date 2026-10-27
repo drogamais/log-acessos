@@ -219,20 +219,18 @@ export function criarLogAcessos(opcoes: OpcoesLogAcessos): LogAcessos {
         const nome = corta(r.usuario.nome || r.usuario.email, 150);
 
         const paginaFrontend = caminhoFrontend(r.headers);
-        // Sem Referer (script, integração, chamada direta) não há página para
-        // agrupar: cada chamada conta.
+        // fat_log_acesso é uso de TELA: sem página do frontend (script,
+        // integração, chamada direta) não há o que registrar. A rota da API
+        // não é gravada (a coluna path saiu em 2026-10-27).
         const gravarAcesso =
-          acesso && (!agruparPorPagina || !paginaFrontend || visitas.visitaNova(email, paginaFrontend));
+          acesso && !!paginaFrontend && (!agruparPorPagina || visitas.visitaNova(email, paginaFrontend));
 
         if (gravarAcesso) {
           gravar(
             `INSERT INTO log_acessos.fat_log_acesso
-               (user_email, user_name, aplicacao, method, path, path_frontend)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            // Com página do frontend, a rota da API não acrescenta nada (é só
-            // a 1ª chamada da visita): path fica NULL. Sem página (script,
-            // integração), a rota é a única informação — grava.
-            [email, nome, aplicacao, r.method, paginaFrontend ? null : corta(caminho, 255), paginaFrontend],
+               (user_email, user_name, aplicacao, method, path_frontend)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [email, nome, aplicacao, r.method, paginaFrontend],
           );
         }
         if (auditoria && METODOS_ESCRITA.has(r.method) && !auditoriaIgnorada(caminho)) {
