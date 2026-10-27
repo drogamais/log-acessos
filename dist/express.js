@@ -4,7 +4,7 @@ import {
   registrarAlteracoes,
   registrarAntes,
   usuarioPadrao
-} from "./chunk-LHEPDUXD.js";
+} from "./chunk-SODPRID2.js";
 
 // src/express.ts
 function logAcessos(opcoes) {

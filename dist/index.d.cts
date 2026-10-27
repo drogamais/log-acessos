@@ -91,6 +91,22 @@ declare function normalizarCaminho(caminho: string): string;
  * trazer termos de busca e filtros).
  */
 declare function caminhoFrontend(headers: Requisicao['headers']): string | null;
+interface Aparelho {
+    /** computador | celular | tablet | outro */
+    dispositivo: string;
+    /** Windows | macOS | Linux | ChromeOS | Android | iOS | Outro */
+    sistema: string;
+    /** Chrome | Edge | Safari | Firefox | Opera | Samsung Internet | WebView | Outro */
+    navegador: string;
+}
+/**
+ * Aparelho pelo User-Agent, com as Client Hints do Chrome/Edge
+ * (Sec-CH-UA-Mobile / Sec-CH-UA-Platform) quando vierem — são mais firmes.
+ * Só a classe, nunca o modelo (o Chrome esconde de propósito). Limite
+ * conhecido: o iPad se identifica como Mac desde o iPadOS 13 → computador/macOS.
+ * Sem User-Agent nenhum → null.
+ */
+declare function classificarAparelho(headers: Requisicao['headers']): Aparelho | null;
 /** Corpo para auditoria: sem campos sensíveis, ocultos como ***, JSON truncado em 2000. */
 declare function corpoAuditoria(body: unknown, ocultos?: ReadonlySet<string>): string | null;
 /**
@@ -130,4 +146,4 @@ declare function criarControleVisitas(janelaMs: number): {
 };
 declare function criarLogAcessos(opcoes: OpcoesLogAcessos): LogAcessos;
 
-export { type Alteracoes, type LogAcessos, type OpcoesLogAcessos, type Requisicao, type Usuario, calcularAlteracoes, caminhoFrontend, corpoAuditoria, criarControleVisitas, criarFiltroRotas, criarLogAcessos, iguais, lerRegistrado, normalizarCaminho, registrarAlteracoes, registrarAntes, usuarioPadrao };
+export { type Alteracoes, type Aparelho, type LogAcessos, type OpcoesLogAcessos, type Requisicao, type Usuario, calcularAlteracoes, caminhoFrontend, classificarAparelho, corpoAuditoria, criarControleVisitas, criarFiltroRotas, criarLogAcessos, iguais, lerRegistrado, normalizarCaminho, registrarAlteracoes, registrarAntes, usuarioPadrao };

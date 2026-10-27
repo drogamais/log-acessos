@@ -143,6 +143,63 @@ export function caminhoFrontend(headers: Requisicao['headers']): string | null {
 
 const OCULTO = '***';
 
+export interface Aparelho {
+  /** computador | celular | tablet | outro */
+  dispositivo: string;
+  /** Windows | macOS | Linux | ChromeOS | Android | iOS | Outro */
+  sistema: string;
+  /** Chrome | Edge | Safari | Firefox | Opera | Samsung Internet | WebView | Outro */
+  navegador: string;
+}
+
+/**
+ * Aparelho pelo User-Agent, com as Client Hints do Chrome/Edge
+ * (Sec-CH-UA-Mobile / Sec-CH-UA-Platform) quando vierem — são mais firmes.
+ * Só a classe, nunca o modelo (o Chrome esconde de propósito). Limite
+ * conhecido: o iPad se identifica como Mac desde o iPadOS 13 → computador/macOS.
+ * Sem User-Agent nenhum → null.
+ */
+export function classificarAparelho(headers: Requisicao['headers']): Aparelho | null {
+  const ua = cabecalho(headers, 'user-agent') ?? '';
+  const chMobile = cabecalho(headers, 'sec-ch-ua-mobile');
+  const chPlataforma = (cabecalho(headers, 'sec-ch-ua-platform') ?? '').replace(/"/g, '').trim();
+  if (!ua && !chPlataforma) return null;
+
+  const plataformas: Record<string, string> = {
+    Windows: 'Windows', macOS: 'macOS', Linux: 'Linux', 'Chrome OS': 'ChromeOS', ChromeOS: 'ChromeOS',
+    Android: 'Android', iOS: 'iOS',
+  };
+  let sistema = plataformas[chPlataforma];
+  if (!sistema) {
+    if (/iPhone|iPad|iPod/.test(ua)) sistema = 'iOS';
+    else if (/Android/.test(ua)) sistema = 'Android';
+    else if (/Windows/.test(ua)) sistema = 'Windows';
+    else if (/CrOS/.test(ua)) sistema = 'ChromeOS';
+    else if (/Macintosh|Mac OS X/.test(ua)) sistema = 'macOS';
+    else if (/Linux/.test(ua)) sistema = 'Linux';
+    else sistema = 'Outro';
+  }
+
+  let dispositivo: string;
+  if (/iPad|Tablet/.test(ua) || (sistema === 'Android' && !/Mobile/.test(ua) && chMobile !== '?1')) dispositivo = 'tablet';
+  else if (chMobile === '?1' || /iPhone|iPod|Mobi/.test(ua)) dispositivo = 'celular';
+  else if (['Windows', 'macOS', 'Linux', 'ChromeOS'].includes(sistema)) dispositivo = 'computador';
+  else dispositivo = 'outro';
+
+  // A ordem importa: Edge, Opera e Samsung também dizem "Chrome", e o Chrome diz "Safari".
+  let navegador: string;
+  if (/Edg(e|A|iOS)?\//.test(ua)) navegador = 'Edge';
+  else if (/OPR\/|Opera/.test(ua)) navegador = 'Opera';
+  else if (/SamsungBrowser\//.test(ua)) navegador = 'Samsung Internet';
+  else if (/Firefox\/|FxiOS\//.test(ua)) navegador = 'Firefox';
+  else if (/; wv\)/.test(ua)) navegador = 'WebView';
+  else if (/Chrome\/|CriOS\/|Chromium\//.test(ua)) navegador = 'Chrome';
+  else if (/Safari\//.test(ua) && /Version\//.test(ua)) navegador = 'Safari';
+  else navegador = 'Outro';
+
+  return { dispositivo, sistema, navegador };
+}
+
 /** Corpo para auditoria: sem campos sensíveis, ocultos como ***, JSON truncado em 2000. */
 export function corpoAuditoria(body: unknown, ocultos: ReadonlySet<string> = new Set()): string | null {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
@@ -363,24 +420,29 @@ export function criarLogAcessos(opcoes: OpcoesLogAcessos): LogAcessos {
         const gravarAcesso =
           acesso && !!paginaFrontend && (!agruparPorPagina || visitas.visitaNova(email, paginaFrontend));
 
+        // Só a classe do aparelho (o User-Agent bruto não é guardado).
+        const ap = gravarAcesso || (auditoria && METODOS_ESCRITA.has(r.method)) ? classificarAparelho(r.headers) : null;
+
         if (gravarAcesso) {
           gravar(
             `INSERT INTO log_acessos.fat_log_acesso
-               (user_email, user_name, aplicacao, method, path_frontend)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [email, nome, aplicacao, r.method, paginaFrontend],
+               (user_email, user_name, aplicacao, method, path_frontend, dispositivo, sistema, navegador)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [email, nome, aplicacao, r.method, paginaFrontend, ap?.dispositivo ?? null, ap?.sistema ?? null, ap?.navegador ?? null],
           );
         }
         if (auditoria && METODOS_ESCRITA.has(r.method) && !auditoriaIgnorada(caminho)) {
           const alteracoes = calcularAlteracoes(r.method, r.body, r.antes, r.alteracoes, ocultos);
           gravar(
             `INSERT INTO log_acessos.fat_log_portal
-               (user_email, user_name, aplicacao, method, path, status_code, body, alteracoes)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
+               (user_email, user_name, aplicacao, method, path, status_code, body, alteracoes,
+                dispositivo, sistema, navegador)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11)`,
             // Sem query string: pode trazer CPF/termos de busca.
             [
               email, nome, aplicacao, r.method, corta(r.url.split('?')[0], 255), r.statusCode,
               corpoAuditoria(r.body, ocultos), alteracoes ? JSON.stringify(alteracoes) : null,
+              ap?.dispositivo ?? null, ap?.sistema ?? null, ap?.navegador ?? null,
             ],
           );
         }

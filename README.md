@@ -8,6 +8,7 @@ Log de acesso e de auditoria dos portais Drogamais, num lugar só.
 | `fat_log_portal` | escritas (POST/PUT/PATCH/DELETE) com o corpo, sem campos sensíveis, e `alteracoes` (de/para, jsonb) quando a rota informa o antes |
 
 - **Visita de página, não chamada de API:** a mesma página do mesmo usuário grava no máximo **uma vez a cada 30 min** (contados da última gravação). Uma tela que dispara 7 GETs grava 1 linha; ir e voltar entre páginas dentro da janela não repete; uma aba parada que consulta a API sozinha (polling) gera 1 linha por janela. A auditoria (`fat_log_portal`) grava toda escrita, sempre.
+- **Aparelho** (`dispositivo`, `sistema`, `navegador`) nas duas tabelas, pelo `User-Agent` + Client Hints do Chrome/Edge: `computador`/`celular`/`tablet`, Windows/macOS/Android/iOS…, Chrome/Edge/Safari… Só a classe — o User-Agent bruto não é guardado e o modelo do aparelho não é conhecido (o Chrome esconde). O iPad se diz Mac: entra como computador/macOS.
 - `pg` puro, **1 conexão** por app que fecha quando ociosa (não disputa o `max_connections` do banco com o app).
 - Sessão em `America/Sao_Paulo`: o `created_at` (DEFAULT do banco) sai no mesmo horário em todos os apps.
 - Nunca lança nem atrasa a resposta; erros vão para o console, no máximo um por minuto.
@@ -19,7 +20,7 @@ Log de acesso e de auditoria dos portais Drogamais, num lugar só.
 Sem npm registry: o app instala o tarball da tag (não precisa de git nem token na imagem Docker).
 
 ```bash
-npm install https://github.com/drogamais/log-acessos/archive/refs/tags/v0.8.0.tar.gz
+npm install https://github.com/drogamais/log-acessos/archive/refs/tags/v0.9.0.tar.gz
 ```
 
 Usa `DATABASE_OPERATIONAL_URL` (o pgDrogamais **principal** — a réplica não aceita escrita).

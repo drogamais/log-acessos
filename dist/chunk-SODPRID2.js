@@ -41,6 +41,46 @@ function caminhoFrontend(headers) {
   return caminho.length > 255 ? caminho.slice(0, 255) : caminho;
 }
 var OCULTO = "***";
+function classificarAparelho(headers) {
+  const ua = cabecalho(headers, "user-agent") ?? "";
+  const chMobile = cabecalho(headers, "sec-ch-ua-mobile");
+  const chPlataforma = (cabecalho(headers, "sec-ch-ua-platform") ?? "").replace(/"/g, "").trim();
+  if (!ua && !chPlataforma) return null;
+  const plataformas = {
+    Windows: "Windows",
+    macOS: "macOS",
+    Linux: "Linux",
+    "Chrome OS": "ChromeOS",
+    ChromeOS: "ChromeOS",
+    Android: "Android",
+    iOS: "iOS"
+  };
+  let sistema = plataformas[chPlataforma];
+  if (!sistema) {
+    if (/iPhone|iPad|iPod/.test(ua)) sistema = "iOS";
+    else if (/Android/.test(ua)) sistema = "Android";
+    else if (/Windows/.test(ua)) sistema = "Windows";
+    else if (/CrOS/.test(ua)) sistema = "ChromeOS";
+    else if (/Macintosh|Mac OS X/.test(ua)) sistema = "macOS";
+    else if (/Linux/.test(ua)) sistema = "Linux";
+    else sistema = "Outro";
+  }
+  let dispositivo;
+  if (/iPad|Tablet/.test(ua) || sistema === "Android" && !/Mobile/.test(ua) && chMobile !== "?1") dispositivo = "tablet";
+  else if (chMobile === "?1" || /iPhone|iPod|Mobi/.test(ua)) dispositivo = "celular";
+  else if (["Windows", "macOS", "Linux", "ChromeOS"].includes(sistema)) dispositivo = "computador";
+  else dispositivo = "outro";
+  let navegador;
+  if (/Edg(e|A|iOS)?\//.test(ua)) navegador = "Edge";
+  else if (/OPR\/|Opera/.test(ua)) navegador = "Opera";
+  else if (/SamsungBrowser\//.test(ua)) navegador = "Samsung Internet";
+  else if (/Firefox\/|FxiOS\//.test(ua)) navegador = "Firefox";
+  else if (/; wv\)/.test(ua)) navegador = "WebView";
+  else if (/Chrome\/|CriOS\/|Chromium\//.test(ua)) navegador = "Chrome";
+  else if (/Safari\//.test(ua) && /Version\//.test(ua)) navegador = "Safari";
+  else navegador = "Outro";
+  return { dispositivo, sistema, navegador };
+}
 function corpoAuditoria(body, ocultos = /* @__PURE__ */ new Set()) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return null;
   const copia = { ...body };
@@ -194,20 +234,22 @@ function criarLogAcessos(opcoes) {
         const nome = corta(r.usuario.nome || r.usuario.email, 150);
         const paginaFrontend = caminhoFrontend(r.headers);
         const gravarAcesso = acesso && !!paginaFrontend && (!agruparPorPagina || visitas.visitaNova(email, paginaFrontend));
+        const ap = gravarAcesso || auditoria && METODOS_ESCRITA.has(r.method) ? classificarAparelho(r.headers) : null;
         if (gravarAcesso) {
           gravar(
             `INSERT INTO log_acessos.fat_log_acesso
-               (user_email, user_name, aplicacao, method, path_frontend)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [email, nome, aplicacao, r.method, paginaFrontend]
+               (user_email, user_name, aplicacao, method, path_frontend, dispositivo, sistema, navegador)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [email, nome, aplicacao, r.method, paginaFrontend, ap?.dispositivo ?? null, ap?.sistema ?? null, ap?.navegador ?? null]
           );
         }
         if (auditoria && METODOS_ESCRITA.has(r.method) && !auditoriaIgnorada(caminho)) {
           const alteracoes = calcularAlteracoes(r.method, r.body, r.antes, r.alteracoes, ocultos);
           gravar(
             `INSERT INTO log_acessos.fat_log_portal
-               (user_email, user_name, aplicacao, method, path, status_code, body, alteracoes)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
+               (user_email, user_name, aplicacao, method, path, status_code, body, alteracoes,
+                dispositivo, sistema, navegador)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11)`,
             // Sem query string: pode trazer CPF/termos de busca.
             [
               email,
@@ -217,7 +259,10 @@ function criarLogAcessos(opcoes) {
               corta(r.url.split("?")[0], 255),
               r.statusCode,
               corpoAuditoria(r.body, ocultos),
-              alteracoes ? JSON.stringify(alteracoes) : null
+              alteracoes ? JSON.stringify(alteracoes) : null,
+              ap?.dispositivo ?? null,
+              ap?.sistema ?? null,
+              ap?.navegador ?? null
             ]
           );
         }
@@ -238,6 +283,7 @@ export {
   lerRegistrado,
   normalizarCaminho,
   caminhoFrontend,
+  classificarAparelho,
   corpoAuditoria,
   iguais,
   calcularAlteracoes,

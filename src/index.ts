@@ -11,5 +11,6 @@ export {
   registrarAntes,
   registrarAlteracoes,
   lerRegistrado,
+  classificarAparelho,
 } from './core.js';
-export type { Alteracoes, LogAcessos, OpcoesLogAcessos, Requisicao, Usuario } from './core.js';
+export type { Alteracoes, Aparelho, LogAcessos, OpcoesLogAcessos, Requisicao, Usuario } from './core.js';

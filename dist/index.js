@@ -1,6 +1,7 @@
 import {
   calcularAlteracoes,
   caminhoFrontend,
+  classificarAparelho,
   corpoAuditoria,
   criarControleVisitas,
   criarFiltroRotas,
@@ -11,10 +12,11 @@ import {
   registrarAlteracoes,
   registrarAntes,
   usuarioPadrao
-} from "./chunk-LHEPDUXD.js";
+} from "./chunk-SODPRID2.js";
 export {
   calcularAlteracoes,
   caminhoFrontend,
+  classificarAparelho,
   corpoAuditoria,
   criarControleVisitas,
   criarFiltroRotas,

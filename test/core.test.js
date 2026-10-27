@@ -2,8 +2,50 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalizarCaminho, caminhoFrontend, corpoAuditoria, usuarioPadrao, criarControleVisitas, criarFiltroRotas,
-  calcularAlteracoes, iguais, registrarAntes, registrarAlteracoes, lerRegistrado,
+  calcularAlteracoes, iguais, registrarAntes, registrarAlteracoes, lerRegistrado, classificarAparelho,
 } from '../dist/index.js';
+
+test('aparelho: User-Agents reais', () => {
+  const ua = (s, extra = {}) => classificarAparelho({ 'user-agent': s, ...extra });
+  const casos = [
+    // Windows + Chrome / Edge
+    ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+      ['computador', 'Windows', 'Chrome']],
+    ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0',
+      ['computador', 'Windows', 'Edge']],
+    // Mac + Safari / Firefox
+    ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
+      ['computador', 'macOS', 'Safari']],
+    ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:131.0) Gecko/20100101 Firefox/131.0', ['computador', 'macOS', 'Firefox']],
+    // iPhone: Safari e Chrome (CriOS)
+    ['Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+      ['celular', 'iOS', 'Safari']],
+    ['Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/130.0.6723.90 Mobile/15E148 Safari/604.1',
+      ['celular', 'iOS', 'Chrome']],
+    // Android: Chrome reduzido (modelo "K"), Samsung Internet, WebView de app
+    ['Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36',
+      ['celular', 'Android', 'Chrome']],
+    ['Mozilla/5.0 (Linux; Android 14; SAMSUNG SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/26.0 Chrome/122.0.0.0 Mobile Safari/537.36',
+      ['celular', 'Android', 'Samsung Internet']],
+    ['Mozilla/5.0 (Linux; Android 13; SM-A135M Build/TP1A.220624.014; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0.0.0 Mobile Safari/537.36',
+      ['celular', 'Android', 'WebView']],
+    // Tablet Android (sem "Mobile") e iPad antigo
+    ['Mozilla/5.0 (Linux; Android 13; SM-X200) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+      ['tablet', 'Android', 'Chrome']],
+    ['Mozilla/5.0 (iPad; CPU OS 12_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1 Mobile/15E148 Safari/604.1',
+      ['tablet', 'iOS', 'Safari']],
+  ];
+  for (const [s, [dispositivo, sistema, navegador]] of casos) {
+    assert.deepEqual(ua(s), { dispositivo, sistema, navegador }, s);
+  }
+  // Client Hints mandam: Chrome "desktop mode" no Android ainda diz que é celular
+  assert.deepEqual(
+    ua('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+      { 'sec-ch-ua-mobile': '?1', 'sec-ch-ua-platform': '"Android"' }),
+    { dispositivo: 'celular', sistema: 'Android', navegador: 'Chrome' },
+  );
+  assert.equal(classificarAparelho({}), null);
+});
 import * as fastify from '../dist/fastify.js';
 import * as express from '../dist/express.js';
 
