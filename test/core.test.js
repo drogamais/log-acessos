@@ -46,6 +46,26 @@ test('aparelho: User-Agents reais', () => {
   );
   assert.equal(classificarAparelho({}), null);
 });
+
+test('aparelho: navegador pela marca do Sec-CH-UA (Brave se passa por Chrome no User-Agent)', () => {
+  const chrome = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+  const nav = (secChUa, ua = chrome) => classificarAparelho({ 'user-agent': ua, 'sec-ch-ua': secChUa, 'sec-ch-ua-platform': '"Windows"' }).navegador;
+  assert.equal(nav('"Chromium";v="130", "Brave";v="130", "Not?A_Brand";v="99"'), 'Brave');
+  assert.equal(nav('"Google Chrome";v="130", "Chromium";v="130", "Not_A Brand";v="24"'), 'Chrome');
+  assert.equal(nav('"Microsoft Edge";v="130", "Chromium";v="130", "Not?A_Brand";v="99"'), 'Edge');
+  assert.equal(nav('"Opera";v="114", "Chromium";v="128", "Not;A=Brand";v="24"'), 'Opera');
+  // só Chromium: não afirma Chrome
+  assert.equal(nav('"Chromium";v="130", "Not?A_Brand";v="99"'), 'Chromium');
+  // sem o cabeçalho, como antes: pelo User-Agent
+  assert.equal(nav(undefined), 'Chrome');
+  assert.equal(nav(undefined, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0'), 'Firefox');
+  // WebView de app Android
+  assert.equal(
+    classificarAparelho({ 'user-agent': 'Mozilla/5.0 (Linux; Android 13; SM-A135M; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0.0.0 Mobile Safari/537.36',
+      'sec-ch-ua': '"Android WebView";v="130", "Chromium";v="130", "Not?A_Brand";v="99"', 'sec-ch-ua-mobile': '?1' }).navegador,
+    'WebView',
+  );
+});
 import * as fastify from '../dist/fastify.js';
 import * as express from '../dist/express.js';
 

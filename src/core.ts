@@ -148,7 +148,7 @@ export interface Aparelho {
   dispositivo: string;
   /** Windows | macOS | Linux | ChromeOS | Android | iOS | Outro */
   sistema: string;
-  /** Chrome | Edge | Safari | Firefox | Opera | Samsung Internet | WebView | Outro */
+  /** Chrome | Edge | Brave | Opera | Vivaldi | Safari | Firefox | Samsung Internet | WebView | Chromium | Outro */
   navegador: string;
 }
 
@@ -186,9 +186,24 @@ export function classificarAparelho(headers: Requisicao['headers']): Aparelho | 
   else if (['Windows', 'macOS', 'Linux', 'ChromeOS'].includes(sistema)) dispositivo = 'computador';
   else dispositivo = 'outro';
 
+  // Navegador pela marca que ele mesmo declara (Sec-CH-UA, Chromium em HTTPS):
+  // o Brave copia o User-Agent do Chrome de propósito e só aparece aqui.
+  // Sem marca conhecida além de "Chromium" (Arc, Brave com escudo, etc.), grava
+  // "Chromium" em vez de afirmar Chrome. Sem o cabeçalho (Firefox, Safari), cai
+  // no User-Agent abaixo.
+  const marcas = [...(cabecalho(headers, 'sec-ch-ua') ?? '').matchAll(/"([^"]+)";\s*v="/g)].map((m) => m[1]);
+  const porMarca: [string, string][] = [
+    ['Brave', 'Brave'], ['Microsoft Edge', 'Edge'], ['Opera GX', 'Opera'], ['Opera', 'Opera'],
+    ['Vivaldi', 'Vivaldi'], ['Samsung Internet', 'Samsung Internet'], ['Android WebView', 'WebView'],
+    ['Google Chrome', 'Chrome'],
+  ];
+  const daMarca = porMarca.find(([marca]) => marcas.includes(marca))?.[1]
+    ?? (marcas.includes('Chromium') ? 'Chromium' : undefined);
+
   // A ordem importa: Edge, Opera e Samsung também dizem "Chrome", e o Chrome diz "Safari".
   let navegador: string;
-  if (/Edg(e|A|iOS)?\//.test(ua)) navegador = 'Edge';
+  if (daMarca) navegador = daMarca;
+  else if (/Edg(e|A|iOS)?\//.test(ua)) navegador = 'Edge';
   else if (/OPR\/|Opera/.test(ua)) navegador = 'Opera';
   else if (/SamsungBrowser\//.test(ua)) navegador = 'Samsung Internet';
   else if (/Firefox\/|FxiOS\//.test(ua)) navegador = 'Firefox';

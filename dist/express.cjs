@@ -109,8 +109,21 @@ function classificarAparelho(headers) {
   else if (chMobile === "?1" || /iPhone|iPod|Mobi/.test(ua)) dispositivo = "celular";
   else if (["Windows", "macOS", "Linux", "ChromeOS"].includes(sistema)) dispositivo = "computador";
   else dispositivo = "outro";
+  const marcas = [...(cabecalho(headers, "sec-ch-ua") ?? "").matchAll(/"([^"]+)";\s*v="/g)].map((m) => m[1]);
+  const porMarca = [
+    ["Brave", "Brave"],
+    ["Microsoft Edge", "Edge"],
+    ["Opera GX", "Opera"],
+    ["Opera", "Opera"],
+    ["Vivaldi", "Vivaldi"],
+    ["Samsung Internet", "Samsung Internet"],
+    ["Android WebView", "WebView"],
+    ["Google Chrome", "Chrome"]
+  ];
+  const daMarca = porMarca.find(([marca]) => marcas.includes(marca))?.[1] ?? (marcas.includes("Chromium") ? "Chromium" : void 0);
   let navegador;
-  if (/Edg(e|A|iOS)?\//.test(ua)) navegador = "Edge";
+  if (daMarca) navegador = daMarca;
+  else if (/Edg(e|A|iOS)?\//.test(ua)) navegador = "Edge";
   else if (/OPR\/|Opera/.test(ua)) navegador = "Opera";
   else if (/SamsungBrowser\//.test(ua)) navegador = "Samsung Internet";
   else if (/Firefox\/|FxiOS\//.test(ua)) navegador = "Firefox";

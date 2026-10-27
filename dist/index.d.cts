@@ -96,7 +96,7 @@ interface Aparelho {
     dispositivo: string;
     /** Windows | macOS | Linux | ChromeOS | Android | iOS | Outro */
     sistema: string;
-    /** Chrome | Edge | Safari | Firefox | Opera | Samsung Internet | WebView | Outro */
+    /** Chrome | Edge | Brave | Opera | Vivaldi | Safari | Firefox | Samsung Internet | WebView | Chromium | Outro */
     navegador: string;
 }
 /**
