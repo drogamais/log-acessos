@@ -98,18 +98,19 @@ function criarFiltroRotas(regras) {
   return (caminho) => testes.some((t) => t(caminho));
 }
 function criarControleVisitas(janelaMs) {
-  const ultimas = /* @__PURE__ */ new Map();
+  const gravadas = /* @__PURE__ */ new Map();
   let ultimaLimpeza = 0;
   return {
     visitaNova(usuario, pagina, agora = Date.now()) {
       if (agora - ultimaLimpeza > janelaMs) {
-        for (const [k, v] of ultimas) if (agora - v.quando > janelaMs) ultimas.delete(k);
+        for (const [k, quando2] of gravadas) if (agora - quando2 >= janelaMs) gravadas.delete(k);
         ultimaLimpeza = agora;
       }
-      const ultima = ultimas.get(usuario);
-      const nova = !ultima || ultima.pagina !== pagina || agora - ultima.quando > janelaMs;
-      ultimas.set(usuario, { pagina, quando: agora });
-      return nova;
+      const chave = `${usuario}\0${pagina}`;
+      const quando = gravadas.get(chave);
+      if (quando !== void 0 && agora - quando < janelaMs) return false;
+      gravadas.set(chave, agora);
+      return true;
     }
   };
 }

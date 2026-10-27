@@ -21,11 +21,11 @@ interface OpcoesLogAcessos {
     ignorarAuditoria?: (string | RegExp)[];
     /**
      * fat_log_acesso grava uma linha por VISITA de página (path_frontend), não
-     * por chamada de API: as demais chamadas da mesma página são ignoradas
-     * enquanto o usuário seguir nela. Padrão: true.
+     * por chamada de API: a mesma página do mesmo usuário grava no máximo uma
+     * vez por janela (janelaVisitaMin). Padrão: true.
      */
     agruparPorPagina?: boolean;
-    /** Minutos sem atividade na página para contar uma visita nova. Padrão: 30. */
+    /** Minutos até a mesma página do mesmo usuário poder gravar de novo. Padrão: 30. */
     janelaVisitaMin?: number;
 }
 /** O que os adaptadores (Fastify/Express) extraem de cada requisição. */
@@ -67,9 +67,12 @@ declare function usuarioPadrao(u: unknown): Usuario | null;
 /** true se o caminho bate com alguma regra (string = exata ou prefixo de segmento; RegExp = test). */
 declare function criarFiltroRotas(regras: (string | RegExp)[]): (caminho: string) => boolean;
 /**
- * Decide se uma chamada abre uma visita nova de página. Por usuário guarda a
- * última página e quando ela foi usada: mesma página dentro da janela →
- * mesma visita (não grava); outra página ou janela vencida → visita nova.
+ * Decide se uma chamada abre uma visita nova de página: a mesma página do
+ * mesmo usuário grava NO MÁXIMO uma vez por janela, contada da última vez
+ * que gravou. Ir e voltar entre páginas dentro da janela não repete, e uma
+ * aba parada que consulta a API sozinha (polling) gera uma linha por janela —
+ * antes (só a última página por usuário) duas abas alternando viravam uma
+ * visita a cada consulta.
  * Em memória, por processo: um restart do app conta uma visita a mais, só.
  */
 declare function criarControleVisitas(janelaMs: number): {

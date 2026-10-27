@@ -1,7 +1,7 @@
 import {
   criarLogAcessos,
   usuarioPadrao
-} from "./chunk-CJKPULCA.js";
+} from "./chunk-3U566USD.js";
 
 // src/express.ts
 function logAcessos(opcoes) {

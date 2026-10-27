@@ -24,11 +24,11 @@ export interface OpcoesLogAcessos {
   ignorarAuditoria?: (string | RegExp)[];
   /**
    * fat_log_acesso grava uma linha por VISITA de página (path_frontend), não
-   * por chamada de API: as demais chamadas da mesma página são ignoradas
-   * enquanto o usuário seguir nela. Padrão: true.
+   * por chamada de API: a mesma página do mesmo usuário grava no máximo uma
+   * vez por janela (janelaVisitaMin). Padrão: true.
    */
   agruparPorPagina?: boolean;
-  /** Minutos sem atividade na página para contar uma visita nova. Padrão: 30. */
+  /** Minutos até a mesma página do mesmo usuário poder gravar de novo. Padrão: 30. */
   janelaVisitaMin?: number;
 }
 
@@ -137,26 +137,31 @@ export function criarFiltroRotas(regras: (string | RegExp)[]): (caminho: string)
 }
 
 /**
- * Decide se uma chamada abre uma visita nova de página. Por usuário guarda a
- * última página e quando ela foi usada: mesma página dentro da janela →
- * mesma visita (não grava); outra página ou janela vencida → visita nova.
+ * Decide se uma chamada abre uma visita nova de página: a mesma página do
+ * mesmo usuário grava NO MÁXIMO uma vez por janela, contada da última vez
+ * que gravou. Ir e voltar entre páginas dentro da janela não repete, e uma
+ * aba parada que consulta a API sozinha (polling) gera uma linha por janela —
+ * antes (só a última página por usuário) duas abas alternando viravam uma
+ * visita a cada consulta.
  * Em memória, por processo: um restart do app conta uma visita a mais, só.
  */
 export function criarControleVisitas(janelaMs: number) {
-  const ultimas = new Map<string, { pagina: string; quando: number }>();
+  // chave usuário + página → quando a visita foi gravada
+  const gravadas = new Map<string, number>();
   let ultimaLimpeza = 0;
 
   return {
     visitaNova(usuario: string, pagina: string, agora = Date.now()): boolean {
-      // Limpa quem sumiu, no máximo uma vez por janela (o Map não cresce sem fim).
+      // Limpa o que venceu, no máximo uma vez por janela (o Map não cresce sem fim).
       if (agora - ultimaLimpeza > janelaMs) {
-        for (const [k, v] of ultimas) if (agora - v.quando > janelaMs) ultimas.delete(k);
+        for (const [k, quando] of gravadas) if (agora - quando >= janelaMs) gravadas.delete(k);
         ultimaLimpeza = agora;
       }
-      const ultima = ultimas.get(usuario);
-      const nova = !ultima || ultima.pagina !== pagina || agora - ultima.quando > janelaMs;
-      ultimas.set(usuario, { pagina, quando: agora });
-      return nova;
+      const chave = `${usuario}\u0000${pagina}`;
+      const quando = gravadas.get(chave);
+      if (quando !== undefined && agora - quando < janelaMs) return false;
+      gravadas.set(chave, agora);
+      return true;
     },
   };
 }

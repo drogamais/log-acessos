@@ -22,22 +22,34 @@ test('visitas: várias chamadas da mesma página = 1 visita', () => {
   assert.equal(v.visitaNova('joao', '/', t + 300), true);
 });
 
-test('visitas: trocar de página e voltar conta de novo', () => {
+test('visitas: ir e voltar entre páginas dentro da janela não repete', () => {
   const v = criarControleVisitas(30 * 60_000);
   assert.equal(v.visitaNova('ana', '/a', 0), true);
   assert.equal(v.visitaNova('ana', '/b', 1000), true);
-  assert.equal(v.visitaNova('ana', '/a', 2000), true);
+  assert.equal(v.visitaNova('ana', '/a', 2000), false);
+  assert.equal(v.visitaNova('ana', '/b', 3000), false);
 });
 
-test('visitas: parado mais que a janela conta visita nova; ativo não', () => {
+test('visitas: duas abas em polling alternado = 1 linha por página por janela', () => {
+  // caso real do chamados: /demandas e /tarefas abertas, consultando a cada 30 s
+  const j = 30 * 60_000;
+  const v = criarControleVisitas(j);
+  let gravadas = 0;
+  for (let t = 0; t < 2 * j; t += 30_000) {
+    if (v.visitaNova('ana', t % 60_000 ? '/tarefas' : '/demandas', t)) gravadas++;
+  }
+  assert.equal(gravadas, 4); // 2 páginas × 2 janelas (antes: 240)
+});
+
+test('visitas: a janela conta da última gravação, não da última chamada', () => {
   const j = 30 * 60_000;
   const v = criarControleVisitas(j);
   assert.equal(v.visitaNova('ana', '/', 0), true);
-  // usando a página continuamente (cada chamada renova), mesmo passando de 30 min no total
   assert.equal(v.visitaNova('ana', '/', j - 1), false);
-  assert.equal(v.visitaNova('ana', '/', 2 * j - 2), false);
-  // 30 min+ sem nada
-  assert.equal(v.visitaNova('ana', '/', 3 * j), true);
+  // uso contínuo: uma linha nova a cada janela
+  assert.equal(v.visitaNova('ana', '/', j), true);
+  assert.equal(v.visitaNova('ana', '/', 2 * j - 1), false);
+  assert.equal(v.visitaNova('ana', '/', 2 * j), true);
 });
 
 test('normalizarCaminho troca ids por :id e tira query', () => {
