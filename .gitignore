@@ -1,0 +1,4 @@
+node_modules/
+# dist/ é versionado DE PROPÓSITO: os apps instalam pelo tarball da tag no
+# GitHub (sem npm registry, sem git na imagem), então o código compilado
+# precisa estar na tag.
