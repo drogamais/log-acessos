@@ -1,6 +1,6 @@
 {
   "name": "@drogamais/log-acessos",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Log de acesso e auditoria dos portais Drogamais (log_acessos no pgDrogamais) — plugin Fastify e middleware Express.",
   "license": "UNLICENSED",
   "type": "module",
@@ -19,6 +19,12 @@
     "./express": {
       "import": { "types": "./dist/express.d.ts", "default": "./dist/express.js" },
       "require": { "types": "./dist/express.d.cts", "default": "./dist/express.cjs" }
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "fastify": ["./dist/fastify.d.cts"],
+      "express": ["./dist/express.d.cts"]
     }
   },
   "files": ["dist"],
