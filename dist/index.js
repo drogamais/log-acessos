@@ -12,7 +12,7 @@ import {
   registrarAlteracoes,
   registrarAntes,
   usuarioPadrao
-} from "./chunk-SLLE73KR.js";
+} from "./chunk-ZYKOOIL5.js";
 export {
   calcularAlteracoes,
   caminhoFrontend,

@@ -13,6 +13,20 @@ interface OpcoesLogAcessos {
     /** Grava escritas (POST/PUT/PATCH/DELETE) com o corpo em fat_log_portal. Padrão: true. */
     auditoria?: boolean;
     /**
+     * Grava leituras (GET) que falharam (status >= 400) em fat_erro_acesso:
+     * 403 (sem permissão), 404 (registro inexistente), 5xx (a API quebrou).
+     * Escrita com erro já vai para fat_log_portal. Padrão: true.
+     */
+    erros?: boolean;
+    /** Minutos até o mesmo usuário + rota + status poder gravar de novo. Padrão: 10. */
+    janelaErroMin?: number;
+    /**
+     * Rotas cujo erro de leitura NÃO é gravado — ex.: uma consulta em que o 404
+     * é resposta normal ("ainda não cadastrado"). Mesmas regras do
+     * ignorarAuditoria.
+     */
+    ignorarErros?: (string | RegExp)[];
+    /**
      * Rotas que a auditoria NÃO grava (o acesso continua). String = rota exata
      * ou prefixo (`/api/x` pega `/api/x` e `/api/x/...`); RegExp = teste livre.
      * Comparado com o caminho sem query e com IDs já como `:id`.

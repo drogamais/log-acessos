@@ -4,7 +4,7 @@ import {
   registrarAlteracoes,
   registrarAntes,
   usuarioPadrao
-} from "./chunk-SLLE73KR.js";
+} from "./chunk-ZYKOOIL5.js";
 
 // src/fastify.ts
 async function logAcessos(fastify, opcoes) {

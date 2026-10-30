@@ -1,9 +1,62 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import pg from 'pg';
 import {
   normalizarCaminho, caminhoFrontend, corpoAuditoria, usuarioPadrao, criarControleVisitas, criarFiltroRotas,
   calcularAlteracoes, iguais, registrarAntes, registrarAlteracoes, lerRegistrado, classificarAparelho,
+  criarLogAcessos,
 } from '../dist/index.js';
+
+/** criarLogAcessos sem banco: guarda [tabela, valores] de cada INSERT. */
+function logCapturado(opcoes = {}) {
+  const inserts = [];
+  const original = pg.Pool.prototype.query;
+  pg.Pool.prototype.query = async function (sql, valores) {
+    inserts.push([sql.match(/log_acessos\.(\w+)/)[1], valores]);
+    return { rows: [] };
+  };
+  const log = criarLogAcessos({ aplicacao: 'teste', connectionString: 'postgres://x@localhost/x', ...opcoes });
+  return { log, inserts, restaurar: () => { pg.Pool.prototype.query = original; return log.fechar(); } };
+}
+
+const req = (extra) => ({
+  method: 'GET', url: '/api/campanhas/999?cpf=1', statusCode: 404,
+  headers: { referer: 'https://app.drogamais.com.br/campanha/999', host: 'app.drogamais.com.br' },
+  usuario: { email: 'ana@drogamais.com.br', nome: 'Ana' }, ...extra,
+});
+
+test('erros: GET com falha vai para fat_erro_acesso, com rota (sem query), página e status', async () => {
+  const { log, inserts, restaurar } = logCapturado({ acesso: false });
+  log.registrar(req());
+  await restaurar();
+  assert.equal(inserts.length, 1);
+  const [tabela, v] = inserts[0];
+  assert.equal(tabela, 'fat_erro_acesso');
+  assert.deepEqual(v.slice(0, 7), ['ana@drogamais.com.br', 'Ana', 'teste', 'GET', '/api/campanhas/999', '/campanha/999', 404]);
+});
+
+test('erros: repetição na janela grava 1; sucesso, escrita, sem login e rota ignorada não gravam', async () => {
+  const { log, inserts, restaurar } = logCapturado({ acesso: false, auditoria: false, ignorarErros: ['/api/cadastro'] });
+  log.registrar(req());
+  log.registrar(req());                                  // mesma rota + status: ignora
+  log.registrar(req({ statusCode: 500 }));               // outro status: grava
+  log.registrar(req({ url: '/api/campanhas/1000' }));    // outro registro: grava
+  log.registrar(req({ statusCode: 200 }));
+  log.registrar(req({ method: 'POST' }));                // escrita: é da auditoria
+  log.registrar(req({ usuario: null }));
+  log.registrar(req({ url: '/api/cadastro/123' }));
+  await restaurar();
+  assert.deepEqual(inserts.map(([, v]) => `${v[4]} ${v[6]}`), [
+    '/api/campanhas/999 404', '/api/campanhas/999 500', '/api/campanhas/1000 404',
+  ]);
+});
+
+test('erros: desligável (erros: false)', async () => {
+  const { log, inserts, restaurar } = logCapturado({ acesso: false, erros: false });
+  log.registrar(req());
+  await restaurar();
+  assert.equal(inserts.length, 0);
+});
 
 test('aparelho: User-Agents reais', () => {
   const ua = (s, extra = {}) => classificarAparelho({ 'user-agent': s, ...extra });

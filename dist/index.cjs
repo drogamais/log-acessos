@@ -244,9 +244,19 @@ function criarControleVisitas(janelaMs) {
   };
 }
 function criarLogAcessos(opcoes) {
-  const { aplicacao, acesso = true, auditoria = true, agruparPorPagina = true, janelaVisitaMin = 30 } = opcoes;
+  const {
+    aplicacao,
+    acesso = true,
+    auditoria = true,
+    erros = true,
+    agruparPorPagina = true,
+    janelaVisitaMin = 30,
+    janelaErroMin = 10
+  } = opcoes;
   const visitas = criarControleVisitas(janelaVisitaMin * 6e4);
+  const errosGravados = criarControleVisitas(janelaErroMin * 6e4);
   const auditoriaIgnorada = criarFiltroRotas(opcoes.ignorarAuditoria ?? []);
+  const erroIgnorado = criarFiltroRotas(opcoes.ignorarErros ?? []);
   const ocultos = new Set((opcoes.ocultarCampos ?? []).map((c) => c.toLowerCase()));
   const url = opcoes.connectionString ?? process.env.DATABASE_OPERATIONAL_URL;
   let pool = null;
@@ -295,13 +305,35 @@ function criarLogAcessos(opcoes) {
         const nome = corta(r.usuario.nome || r.usuario.email, 150);
         const paginaFrontend = caminhoFrontend(r.headers);
         const gravarAcesso = acesso && !!paginaFrontend && (!agruparPorPagina || visitas.visitaNova(email, paginaFrontend));
-        const ap = gravarAcesso || auditoria && METODOS_ESCRITA.has(r.method) ? classificarAparelho(r.headers) : null;
+        const rotaApi = corta(r.url.split("?")[0], 255);
+        const gravarErro = erros && r.method === "GET" && r.statusCode >= 400 && !erroIgnorado(caminho) && errosGravados.visitaNova(email, `${rotaApi}\0${r.statusCode}`);
+        const ap = gravarAcesso || gravarErro || auditoria && METODOS_ESCRITA.has(r.method) ? classificarAparelho(r.headers) : null;
         if (gravarAcesso) {
           gravar(
             `INSERT INTO log_acessos.fat_log_acesso
                (user_email, user_name, aplicacao, method, path_frontend, dispositivo, sistema, navegador)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
             [email, nome, aplicacao, r.method, paginaFrontend, ap?.dispositivo ?? null, ap?.sistema ?? null, ap?.navegador ?? null]
+          );
+        }
+        if (gravarErro) {
+          gravar(
+            `INSERT INTO log_acessos.fat_erro_acesso
+               (user_email, user_name, aplicacao, method, path, path_frontend, status_code,
+                dispositivo, sistema, navegador)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [
+              email,
+              nome,
+              aplicacao,
+              r.method,
+              rotaApi,
+              paginaFrontend,
+              r.statusCode,
+              ap?.dispositivo ?? null,
+              ap?.sistema ?? null,
+              ap?.navegador ?? null
+            ]
           );
         }
         if (auditoria && METODOS_ESCRITA.has(r.method) && !auditoriaIgnorada(caminho)) {
@@ -311,13 +343,12 @@ function criarLogAcessos(opcoes) {
                (user_email, user_name, aplicacao, method, path, status_code, body, alteracoes,
                 dispositivo, sistema, navegador)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11)`,
-            // Sem query string: pode trazer CPF/termos de busca.
             [
               email,
               nome,
               aplicacao,
               r.method,
-              corta(r.url.split("?")[0], 255),
+              rotaApi,
               r.statusCode,
               corpoAuditoria(r.body, ocultos),
               alteracoes ? JSON.stringify(alteracoes) : null,

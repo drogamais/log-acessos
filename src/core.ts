@@ -16,6 +16,20 @@ export interface OpcoesLogAcessos {
   /** Grava escritas (POST/PUT/PATCH/DELETE) com o corpo em fat_log_portal. Padrão: true. */
   auditoria?: boolean;
   /**
+   * Grava leituras (GET) que falharam (status >= 400) em fat_erro_acesso:
+   * 403 (sem permissão), 404 (registro inexistente), 5xx (a API quebrou).
+   * Escrita com erro já vai para fat_log_portal. Padrão: true.
+   */
+  erros?: boolean;
+  /** Minutos até o mesmo usuário + rota + status poder gravar de novo. Padrão: 10. */
+  janelaErroMin?: number;
+  /**
+   * Rotas cujo erro de leitura NÃO é gravado — ex.: uma consulta em que o 404
+   * é resposta normal ("ainda não cadastrado"). Mesmas regras do
+   * ignorarAuditoria.
+   */
+  ignorarErros?: (string | RegExp)[];
+  /**
    * Rotas que a auditoria NÃO grava (o acesso continua). String = rota exata
    * ou prefixo (`/api/x` pega `/api/x` e `/api/x/...`); RegExp = teste livre.
    * Comparado com o caminho sem query e com IDs já como `:id`.
@@ -371,9 +385,16 @@ export function criarControleVisitas(janelaMs: number) {
 }
 
 export function criarLogAcessos(opcoes: OpcoesLogAcessos): LogAcessos {
-  const { aplicacao, acesso = true, auditoria = true, agruparPorPagina = true, janelaVisitaMin = 30 } = opcoes;
+  const {
+    aplicacao, acesso = true, auditoria = true, erros = true,
+    agruparPorPagina = true, janelaVisitaMin = 30, janelaErroMin = 10,
+  } = opcoes;
   const visitas = criarControleVisitas(janelaVisitaMin * 60_000);
+  // Mesmo controle das visitas, com a chave rota + status no lugar da página:
+  // uma tela que repete a chamada que falha (polling, retry) não inunda.
+  const errosGravados = criarControleVisitas(janelaErroMin * 60_000);
   const auditoriaIgnorada = criarFiltroRotas(opcoes.ignorarAuditoria ?? []);
+  const erroIgnorado = criarFiltroRotas(opcoes.ignorarErros ?? []);
   const ocultos = new Set((opcoes.ocultarCampos ?? []).map((c) => c.toLowerCase()));
   const url = opcoes.connectionString ?? process.env.DATABASE_OPERATIONAL_URL;
   let pool: pg.Pool | null = null;
@@ -435,8 +456,17 @@ export function criarLogAcessos(opcoes: OpcoesLogAcessos): LogAcessos {
         const gravarAcesso =
           acesso && !!paginaFrontend && (!agruparPorPagina || visitas.visitaNova(email, paginaFrontend));
 
+        // Rota da API com os IDs (qual registro deu 404), sem query (pode
+        // trazer CPF/termos de busca).
+        const rotaApi = corta(r.url.split('?')[0], 255);
+        const gravarErro =
+          erros && r.method === 'GET' && r.statusCode >= 400 && !erroIgnorado(caminho) &&
+          errosGravados.visitaNova(email, `${rotaApi}\u0000${r.statusCode}`);
+
         // Só a classe do aparelho (o User-Agent bruto não é guardado).
-        const ap = gravarAcesso || (auditoria && METODOS_ESCRITA.has(r.method)) ? classificarAparelho(r.headers) : null;
+        const ap = gravarAcesso || gravarErro || (auditoria && METODOS_ESCRITA.has(r.method))
+          ? classificarAparelho(r.headers)
+          : null;
 
         if (gravarAcesso) {
           gravar(
@@ -446,6 +476,18 @@ export function criarLogAcessos(opcoes: OpcoesLogAcessos): LogAcessos {
             [email, nome, aplicacao, r.method, paginaFrontend, ap?.dispositivo ?? null, ap?.sistema ?? null, ap?.navegador ?? null],
           );
         }
+        if (gravarErro) {
+          gravar(
+            `INSERT INTO log_acessos.fat_erro_acesso
+               (user_email, user_name, aplicacao, method, path, path_frontend, status_code,
+                dispositivo, sistema, navegador)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [
+              email, nome, aplicacao, r.method, rotaApi, paginaFrontend, r.statusCode,
+              ap?.dispositivo ?? null, ap?.sistema ?? null, ap?.navegador ?? null,
+            ],
+          );
+        }
         if (auditoria && METODOS_ESCRITA.has(r.method) && !auditoriaIgnorada(caminho)) {
           const alteracoes = calcularAlteracoes(r.method, r.body, r.antes, r.alteracoes, ocultos);
           gravar(
@@ -453,9 +495,8 @@ export function criarLogAcessos(opcoes: OpcoesLogAcessos): LogAcessos {
                (user_email, user_name, aplicacao, method, path, status_code, body, alteracoes,
                 dispositivo, sistema, navegador)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11)`,
-            // Sem query string: pode trazer CPF/termos de busca.
             [
-              email, nome, aplicacao, r.method, corta(r.url.split('?')[0], 255), r.statusCode,
+              email, nome, aplicacao, r.method, rotaApi, r.statusCode,
               corpoAuditoria(r.body, ocultos), alteracoes ? JSON.stringify(alteracoes) : null,
               ap?.dispositivo ?? null, ap?.sistema ?? null, ap?.navegador ?? null,
             ],
