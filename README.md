@@ -16,6 +16,17 @@ Log de acesso e de auditoria dos portais Drogamais, num lugar só.
 - ESM + CommonJS + tipos: serve para apps TS e JS, `type: module` ou não.
 - `path_frontend` guarda a página **com o ID** (`/campanha/123`), sem query string nem `#` — dá para cruzar com o cadastro (qual campanha mais acessada). Para agrupar por tela, use a view `log_acessos.vw_acesso_paginas` (coluna `pagina`, IDs como `:id`). Assets estáticos e `OPTIONS` são ignorados.
 
+## Histórico anterior ao pacote (`method = 'SSO'`)
+
+O pacote grava desde 27/10/2026. O histórico de **abr/2026 até a 1ª linha do pacote em cada app** veio do Authentik (evento `authorize_application`), numa carga única em 24/11/2026 (`scripts/backfill-authentik.mjs`). Depois dela, nada consulta o Authentik: a tabela é a fonte dos relatórios de acesso.
+
+- `method = 'SSO'` marca essas ~10,7 mil linhas; `path_frontend` e aparelho ficam `NULL` (o Authentik não sabe a página).
+- **Uma linha por usuário × app × dia**, no horário do 1º acesso do dia — não é visita de página. Para contar visitas, filtre `method <> 'SSO'`; para comparar o período todo, conte usuário × app × dia nas duas origens.
+- `user_email`/`user_name` = a conta do Authentik (casa com a resolução por e-mail + nome). Login de loja sem e-mail no Authentik usa o e-mail da loja (`drogamais.dim_lojas`); as outras contas sem e-mail (já excluídas) ficaram de fora.
+- Só os portais que usam o pacote. O "Portal Drogamais" (login/tela inicial do Authentik) e as ferramentas internas não entram.
+- As partições de 2026_04 a 2026_09 foram criadas na carga; a procedure `log_acessos.garantir_particoes_fat_log_acesso()` (pg_cron, 3h) segue criando o mês atual e o seguinte.
+- Desfazer: `DELETE FROM log_acessos.fat_log_acesso WHERE method = 'SSO';`
+
 ## Instalação
 
 Sem npm registry: o app instala o tarball da tag (não precisa de git nem token na imagem Docker).
